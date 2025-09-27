@@ -1,0 +1,9 @@
+<!-- Show welcome + login/signup button if NOT logged in -->
+<div *ngIf="!isLoggedIn" class="pill-group">
+  <h1>Welcome to Path-Finder AI</h1>
+  <p>Preparing your AI compass...</p>
+  <button class="pill" (click)="loginOrSignup()">Login / Signup</button>
+</div>
+
+<!-- Show dashboard if logged in -->
+<app-dashboard *ngIf="isLoggedIn"></app-dashboard>

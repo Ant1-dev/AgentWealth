@@ -1,0 +1,43 @@
+/* Keep your existing loading-screen styles for text centering */
+.loading-screen {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  text-align: center;
+  font-family: Arial, sans-serif;
+}
+
+/* Login/Signup rounded pill button */
+.pill {
+  background-color: black;
+  color: white;
+  border: none;
+  padding: 12px 30px;
+  border-radius: 25px;
+  cursor: pointer;
+  font-size: 16px;
+  margin-top: 20px; /* spacing below the text */
+  transition: opacity 0.2s ease;
+}
+
+.pill:hover {
+  opacity: 0.8;
+}
+
+/* Spinner styles (if you want to keep them for later) */
+.spinner {
+  margin-top: 20px;
+  width: 50px;
+  height: 50px;
+  border: 6px solid #f3f3f3; /* Light gray */
+  border-top: 6px solid #4caf50; /* Green */
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
