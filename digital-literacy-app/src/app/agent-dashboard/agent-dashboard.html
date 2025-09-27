@@ -1,0 +1,74 @@
+<div class="dashboard-container">
+  <div class="column">
+    <div class="welcome-banner">
+      <h2>👋 Welcome back!</h2>
+      <p>Your AI agents have been working 24/7 to optimize your financial journey</p>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h4>Live Agent Activity</h4>
+        <span class="last-updated">Last update: 6 seconds ago</span>
+      </div>
+      <div *ngFor="let agent of agents" class="agent-card">
+        <div class="agent-header">
+          <h5>{{ agent.name }}</h5>
+          <span class="status" [ngClass]="agent.status.toLowerCase()">{{ agent.status }}</span>
+        </div>
+        <p class="task">{{ agent.task }}</p>
+        <div class="decision-box">
+          <p><strong>{{ agent.prediction ? 'PREDICTION:' : 'DECISION:' }}</strong> {{ agent.prediction || agent.decision }}</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="column">
+    <div class="card">
+      <div class="card-header">
+        <h4>Agent Predictions</h4>
+      </div>
+      <div class="prediction-item">
+        <p><strong>Next Challenge:</strong> Compound interest confusion predicted in 73% of scenarios</p>
+      </div>
+      <div class="prediction-item">
+        <p><strong>Optimal Time:</strong> Best learning window tomorrow 2-4pm based on your patterns</p>
+      </div>
+       <div class="prediction-item">
+        <p><strong>Goal Achievement:</strong> 89% probability of reaching investment confidence by Friday</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h4>Current Learning</h4>
+      </div>
+      <div class="learning-item">
+        <span>ETF Fundamentals</span>
+        <div class="progress-bar-container">
+          <div class="progress-bar" style="width: 78%;"></div>
+        </div>
+        <span>78% Complete</span>
+      </div>
+      <div class="learning-item">
+        <span>Risk Assessment</span>
+        <div class="progress-bar-container">
+          <div class="progress-bar" style="width: 100%;"></div>
+        </div>
+        <span>Complete ✓</span>
+      </div>
+      <div class="learning-item">
+        <span>Portfolio Building</span>
+        <div class="progress-bar-container">
+          <div class="progress-bar" style="width: 15%;"></div>
+        </div>
+        <span>Coming Next</span>
+      </div>
+      <div class="learning-buttons">
+        <button class="btn-primary">Continue Learning →</button>
+        <button class="btn-secondary">Practice Trading</button>
+        <button class="btn-secondary">View All Progress</button>
+      </div>
+    </div>
+  </div>
+</div>

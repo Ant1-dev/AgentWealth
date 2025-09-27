@@ -1,0 +1,110 @@
+<div class="container">
+  <div class="module-header">
+    <a href="#" class="back-btn">← Dashboard</a>
+    <h1 class="module-title">💰 ETF Fundamentals</h1>
+    <div class="agent-context">
+      <strong>🤖 Personalized by Path Planning Agent:</strong> Content adapted for visual learners with conservative risk tolerance.
+    </div>
+  </div>
+
+  <div class="progress-section">
+    <div class="progress-header">
+      <span class="step-info">Step 3 of 5: Understanding ETF Basics</span>
+      <span class="time-estimate">Estimated time: 8 minutes</span>
+    </div>
+    <div class="progress-bar">
+      <div class="progress-fill"></div>
+    </div>
+  </div>
+
+  <div class="main-content">
+    <div class="lesson-content">
+      <div class="agent-conversation">
+        <div class="agent-message">
+          <div class="agent-avatar">🤖</div>
+          <div class="message-bubble">
+            <div class="agent-name">Path Planning Agent</div>
+            <p>Great job on the risk assessment! I've noticed you learn best with visuals, so I've prepared some diagrams to explain ETFs. Think of an ETF like a fruit basket - instead of buying one fruit, you buy the whole basket and get a variety!</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="lesson-section">
+        <div class="concept-explanation">
+          <h2 class="concept-title"><span>📊</span> What is an ETF?</h2>
+          <p>An <strong>Exchange-Traded Fund (ETF)</strong> is like a basket that holds many different stocks or bonds. Instead of buying individual companies one by one, you can buy one share of the ETF and own tiny pieces of them all!</p>
+          <div class="visual-example">
+            <div class="example-title">🍎 The Fruit Basket Analogy</div>
+            <div class="etf-comparison">
+              <div class="comparison-card">
+                <div class="card-icon">🍎</div>
+                <div class="card-title">Individual Stocks</div>
+                <div class="card-description">Like buying one apple. Risky if that one apple goes bad!</div>
+              </div>
+              <div class="comparison-card">
+                <div class="card-icon">🧺</div>
+                <div class="card-title">ETF</div>
+                <div class="card-description">Like buying a fruit basket. If one fruit is bad, you still have others!</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="interactive-element">
+          <div class="interactive-header">
+            <span>🧠</span>
+            <span class="interactive-title">Quick Understanding Check</span>
+          </div>
+          <div class="quiz-question"><strong>If you buy one share of a Total Stock Market ETF, what do you own?</strong></div>
+          <div class="quiz-options">
+            <div *ngFor="let answer of answers; let i = index"
+                 class="quiz-option"
+                 (click)="selectAnswer(i)"
+                 [class.correct]="selectedAnswerIndex === i && answer.correct"
+                 [class.incorrect]="selectedAnswerIndex === i && !answer.correct">
+              {{ answer.text }}
+            </div>
+          </div>
+          <div class="quiz-feedback" *ngIf="showQuizFeedback && selectedAnswerIndex !== null">
+            <div *ngIf="answers[selectedAnswerIndex].correct" class="feedback-correct"><strong>Correct!</strong> 🎉 You own tiny pieces of thousands of companies.</div>
+            <div *ngIf="!answers[selectedAnswerIndex].correct" class="feedback-incorrect"><strong>Not quite.</strong> An ETF contains many different investments, not just one.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="lesson-controls">
+        <button class="btn btn-secondary" (click)="needHelp()">🤔 Need Help?</button>
+        <button class="btn btn-primary" [disabled]="!quizCompleted" (click)="nextStep()">Continue → Expense Ratios</button>
+      </div>
+    </div>
+
+    <div class="sidebar">
+      <div class="agent-monitor">
+        <div class="monitor-header"><div class="live-indicator"></div><span class="monitor-title">Live Agent Monitoring</span></div>
+        <div *ngFor="let item of agentActivities" class="agent-activity-item">
+          <div class="agent-activity">{{ item.activity }}</div>
+          <div class="agent-decision">{{ item.decision }}</div>
+        </div>
+      </div>
+      <div class="understanding-tracker">
+        <h4>📊 Your Understanding</h4>
+        <div class="understanding-item"><span class="understanding-label">ETF Concept</span><span class="understanding-score">89%</span></div>
+        <div class="understanding-item"><span class="understanding-label">Diversification</span><span class="understanding-score">76%</span></div>
+        <div class="understanding-item"><span class="understanding-label">Risk vs Return</span><span class="understanding-score" style="color: #059669;">✓ High</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="help-popup" *ngIf="isHelpPopupVisible">
+  <div class="help-content">
+    <span class="close-help" (click)="closeHelp()">&times;</span>
+    <h3>🤖 Agent Help Available</h3>
+    <p>I noticed you might need some clarification. What would be most helpful?</p>
+    <div class="help-options">
+      <button class="btn btn-primary" (click)="getHelp('analogy')">Use a different analogy</button>
+      <button class="btn btn-secondary" (click)="getHelp('examples')">Show me more examples</button>
+      <button class="btn btn-secondary" (click)="getHelp('simplify')">Simplify the explanation</button>
+    </div>
+  </div>
+</div>

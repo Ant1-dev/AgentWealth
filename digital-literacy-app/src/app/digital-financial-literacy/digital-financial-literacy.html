@@ -1,0 +1,188 @@
+<div class="container">
+  <div class="sandbox-header">
+    <a href="#" class="back-btn">← Back to Learning</a>
+    <h1 class="sandbox-title">📈 Trading Sandbox</h1>
+    <p class="sandbox-subtitle">Practice investing with $10,000 in virtual funds - learn without the risk!</p>
+    <div class="safe-notice">
+      <span>🛡️</span>
+      <span><strong>100% Safe:</strong> This is a simulation. No real money is involved.</span>
+    </div>
+  </div>
+
+  <div class="main-trading-area">
+    <div class="portfolio-section">
+      <div class="section-header">
+        <h3 class="section-title">💼 Your Practice Portfolio</h3>
+      </div>
+
+      <div class="portfolio-balance">
+        <div class="balance-item">
+          <div class="balance-label">Total Portfolio Value</div>
+          <div class="balance-amount">{{ portfolio.totalValue | currency }}</div>
+        </div>
+
+        <div class="balance-grid">
+          <div class="balance-secondary">
+            <div class="balance-label">Available Cash</div>
+            <div class="balance-amount">{{ portfolio.cash | currency }}</div>
+          </div>
+          <div class="balance-secondary">
+            <div class="balance-label">Invested Amount</div>
+            <div class="balance-amount">{{ investedAmount | currency }}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="etf-marketplace">
+        <div class="marketplace-header">
+          <h4>🏪 ETF Marketplace</h4>
+          <span class="market-status">Market Open</span>
+        </div>
+
+        <div class="etf-list">
+          <div *ngFor="let symbol of etfs" class="etf-card" (click)="selectETF(symbol)" [class.selected]="selectedEtf === symbol">
+            <div class="etf-header">
+              <div>
+                <div class="etf-symbol">{{ symbol }}</div>
+                <div class="etf-name">{{ getEtf(symbol).name }}</div>
+              </div>
+              <div class="etf-price">
+                <div class="price-amount">{{ getEtf(symbol).price | currency }}</div>
+                <div class="price-change" [ngClass]="getEtf(symbol).changeDirection">
+                  {{ getEtf(symbol).change >= 0 ? '+' : '' }}{{ getEtf(symbol).change | number:'1.1-1' }}%
+                  {{ getEtf(symbol).changeDirection === 'up' ? '↗' : '↘' }}
+                </div>
+              </div>
+            </div>
+            <div class="etf-description">
+                <span *ngIf="symbol === 'VTI'">Owns pieces of almost every US company. Perfect for beginners who want instant diversification.</span>
+                <span *ngIf="symbol === 'VXUS'">Invests in companies outside the US, adding global diversification to your portfolio.</span>
+                <span *ngIf="symbol === 'BND'">A collection of safer investments (bonds) that provide stability and income.</span>
+            </div>
+            <div class="etf-actions">
+              <button class="btn btn-buy" (click)="openTradeModal(symbol, getEtf(symbol).price, $event)">Buy</button>
+              <button class="btn btn-research" (click)="showResearch(symbol, $event)">Research</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="agent-sidebar">
+      <div class="agent-guidance">
+        <div class="guidance-header">
+          <div class="live-pulse"></div>
+          <span class="guidance-title">🤖 Live Agent Guidance</span>
+        </div>
+        <div class="guidance-message">
+          <div class="agent-name">Investment Coach Agent</div>
+          <div class="agent-message">{{ coachMessage }}</div>
+        </div>
+        <div class="recommendation-card">
+          <div class="recommendation-header">
+            <span>💡</span>
+            <span class="recommendation-title">Smart Recommendation</span>
+          </div>
+          <div>{{ smartRecommendation }}</div>
+        </div>
+      </div>
+
+      <div class="portfolio-allocation">
+        <h4>📊 Your Holdings</h4>
+        <div class="allocation-item">
+          <div>
+            <div class="allocation-symbol">Cash</div>
+            <div class="allocation-shares">Available to invest</div>
+          </div>
+          <div class="allocation-details">
+            <div class="allocation-value">{{ portfolio.cash | currency }}</div>
+          </div>
+        </div>
+        <div *ngFor="let holding of getHoldings()" class="allocation-item">
+            <div>
+              <div class="allocation-symbol">{{ holding.symbol }}</div>
+              <div class="allocation-shares">{{ holding.shares }} shares</div>
+            </div>
+            <div class="allocation-details">
+              <div class="allocation-value">{{ holding.value | currency }}</div>
+            </div>
+        </div>
+        <div class="portfolio-performance">
+          <span>Portfolio Performance</span>
+          <span [style.color]="portfolioPerformance >= 0 ? '#059669' : '#dc2626'">
+            {{ portfolioPerformance >= 0 ? '+' : '' }}{{ portfolioPerformance | number:'1.2-2' }}%
+          </span>
+        </div>
+      </div>
+
+      <div class="learning-goals">
+        <h4>🎯 Learning Goals</h4>
+        <div>
+          <div>{{ getHoldingsCount() > 0 ? '✓' : '□' }} Make your first investment</div>
+          <div>{{ getHoldingsCount() >= 2 ? '✓' : '□' }} Diversify your portfolio</div>
+          <div>{{ getHoldingsCount() >= 1 ? '✓' : '□' }} Practice risk management</div>
+          <div>{{ getHoldingsCount() >= 3 ? '✓' : '□' }} Build a 3-fund portfolio</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="performance-chart">
+    <div class="chart-header">
+      <div class="chart-title">Portfolio Performance</div>
+      <div class="chart-subtitle">Track your practice investments over time</div>
+    </div>
+    <div class="simple-chart">
+      <div class="chart-points">
+        <div *ngFor="let bar of chartBars" class="chart-bar" [style.height.px]="bar.height"></div>
+      </div>
+    </div>
+    <div class="chart-labels">
+      <span>Day 1</span>
+      <span>Day 5</span>
+      <span>Day 10</span>
+      <span>Day 15</span>
+      <span>Today</span>
+    </div>
+  </div>
+</div>
+
+<div class="trading-modal" *ngIf="isModalOpen">
+  <div class="modal-content">
+    <div class="modal-header">
+      <span class="modal-title">Buy {{ currentTrade.symbol }}</span>
+      <span class="close-modal" (click)="closeTradeModal()">&times;</span>
+    </div>
+    <div class="trade-form">
+      <div class="form-group">
+        <label class="form-label">Number of Shares</label>
+        <input type="number" class="form-input" [(ngModel)]="shareQuantity" placeholder="1" min="1" (input)="updateTradeSummary()">
+      </div>
+      <div class="trade-summary">
+        <div class="summary-row">
+          <span>Share Price:</span>
+          <span>{{ currentTrade.price | currency }}</span>
+        </div>
+        <div class="summary-row">
+          <span>Quantity:</span>
+          <span>{{ shareQuantity }}</span>
+        </div>
+        <div class="summary-row summary-total">
+          <span>Total Cost:</span>
+          <span>{{ totalCost | currency }}</span>
+        </div>
+        <div class="summary-row">
+          <span>Cash Remaining:</span>
+          <span>{{ remainingCash | currency }}</span>
+        </div>
+      </div>
+      <button class="btn-large btn-primary-large" (click)="executeTrade()">Confirm Purchase</button>
+    </div>
+  </div>
+</div>
+
+<div class="achievement-popup" [class.show]="showAchievementPopup">
+  <div class="achievement-icon">🎉</div>
+  <div class="achievement-title">{{ achievementTitle }}</div>
+  <div class="achievement-description">{{ achievementDesc }}</div>
+</div>

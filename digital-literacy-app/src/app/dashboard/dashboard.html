@@ -1,15 +1,28 @@
-<!-- Tab buttons (optional for future tabs) -->
-<div class="dashboard-header"> <h2>Path-Finder AI Dashboard</h2> <button class="logout-btn" (click)="logout()">Logout</button> </div>
-
-<!-- Chat interface -->
-<div id="chat-container" class="chat-container" *ngIf="messages.length">
-  <div *ngFor="let message of messages" [ngClass]="{'user-message': message.sender==='user','ai-message': message.sender==='ai'}">
-    {{ message.text }}
+<div class="dashboard-header">
+  <h2>Path-Finder AI</h2>
+  <div class="tabs">
+    <button (click)="selectTab('agent')" [class.active]="activeTab === 'agent'">🚀 Agent Dashboard</button>
+    <button (click)="selectTab('learning')" [class.active]="activeTab === 'learning'">📚 Learning Center</button>
+    <button (click)="selectTab('finance')" [class.active]="activeTab === 'finance'">📈 Trading Sandbox</button>
+    <button (click)="selectTab('chat')" [class.active]="activeTab === 'chat'">💬 Chat with AI</button>
   </div>
+  <button class="logout-btn" (click)="logout()">Logout</button>
 </div>
 
-<div class="chat-input">
-  <input type="text" [(ngModel)]="userInput" placeholder="Ask a question..." />
-  <button (click)="sendMessage()">Send</button>
-  <button class="logout-btn" (click)="logout()">Logout</button>
+<div [ngSwitch]="activeTab">
+  <app-agent-dashboard *ngSwitchCase="'agent'"></app-agent-dashboard>
+  <app-learning-page *ngSwitchCase="'learning'"></app-learning-page>
+  <app-digital-financial-literacy *ngSwitchCase="'finance'"></app-digital-financial-literacy>
+  
+  <div *ngSwitchCase="'chat'">
+    <div id="chat-container" class="chat-container">
+      <div *ngFor="let message of messages" [ngClass]="{'user-message': message.sender === 'user', 'ai-message': message.sender === 'ai'}">
+        {{ message.text }}
+      </div>
+    </div>
+    <div class="chat-input">
+      <input type="text" [(ngModel)]="userInput" placeholder="Ask a question..." (keyup.enter)="sendMessage()"/>
+      <button (click)="sendMessage()">Send</button>
+    </div>
+  </div>
 </div>

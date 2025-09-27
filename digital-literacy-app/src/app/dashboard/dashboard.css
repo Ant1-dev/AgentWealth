@@ -43,3 +43,26 @@
 .logout-btn {
   background-color: #b00;
 }
+
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #ddd;
+  margin-bottom: 20px;
+}
+
+.tabs button {
+  padding: 10px 20px;
+  border: none;
+  background-color: transparent;
+  cursor: pointer;
+  font-size: 16px;
+  border-bottom: 2px solid transparent;
+}
+
+.tabs button.active {
+  border-bottom: 2px solid #333;
+  font-weight: bold;
+}
