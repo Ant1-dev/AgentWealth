@@ -1,43 +1,77 @@
-/* Keep your existing loading-screen styles for text centering */
-.loading-screen {
+.welcome-container {
+  background-color: rgb(0, 0, 0);
+  color: white;
+  width: 100%;
+  height: 100vh;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  height: 100vh;
+  text-align: center;
+  gap: 20px;
+}
+
+/* Center everything on the page */
+.welcome-container {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100vh; /* full viewport height */
   text-align: center;
   font-family: Arial, sans-serif;
+  gap: 20px;
 }
 
-/* Login/Signup rounded pill button */
-.pill {
+/* Gradient text for the heading */
+.gradient-text {
+  font-size: 3rem;
+  font-weight: bold;
+  background: linear-gradient(90deg, #3300ff, #8000ff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text; /* standard property for compatibility */
+}
+
+/* Typewriter effect */
+.typewriter {
+  overflow: hidden;
+  border-right: 0.15em solid turquoise;
+  white-space: nowrap;
+  animation: typing 3s steps(30, end), blink-caret 0.75s step-end infinite;
+}
+
+@keyframes typing {
+  from { width: 0 }
+  to { width: 100% }
+}
+
+@keyframes blink-caret {
+  from, to { border-color: transparent }
+  50% { border-color: turquoise }
+}
+
+/* Subtext */
+.subtext {
+  font-size: 1.2rem;
+  color: #77726ff3;
+}
+
+/* Pill-style login/signup button */
+.pill-button {
   background-color: black;
   color: white;
-  border: none;
-  padding: 12px 30px;
-  border-radius: 25px;
+  border: 2px solid turquoise;
+  border-radius: 50px;
+  padding: 12px 32px;
+  font-size: 1.1rem;
+  font-weight: bold;
   cursor: pointer;
-  font-size: 16px;
-  margin-top: 20px; /* spacing below the text */
-  transition: opacity 0.2s ease;
+  transition: all 0.3s ease;
 }
 
-.pill:hover {
-  opacity: 0.8;
-}
-
-/* Spinner styles (if you want to keep them for later) */
-.spinner {
-  margin-top: 20px;
-  width: 50px;
-  height: 50px;
-  border: 6px solid #f3f3f3; /* Light gray */
-  border-top: 6px solid #4caf50; /* Green */
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+.pill-button:hover {
+  background-color: turquoise;
+  color: black;
+  border-color: black;
 }

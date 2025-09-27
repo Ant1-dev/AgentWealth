@@ -14,16 +14,16 @@ export class Landing {
   isLoggedIn = false;
 
   constructor(public auth: AuthService) {
-    // Subscribe to auth status
+    // Auth0 Angular already handles redirect callback internally
     this.auth.isAuthenticated$.subscribe(status => {
       this.isLoggedIn = status;
+      console.log('Auth status updated:', status);
     });
   }
 
   loginOrSignup(): void {
-    if (!this.isLoggedIn) {
-      this.auth.loginWithRedirect();
-    }
-    // If already logged in, dashboard will automatically render
+    this.auth.loginWithRedirect({
+      appState: { target: '/dashboard' } // optional redirect target
+    });
   }
 }

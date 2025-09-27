@@ -1,13 +1,17 @@
 import { Component, signal } from '@angular/core';
-import { Landing } from './landing/landing';
+import { RouterOutlet, Router } from '@angular/router';
+import { AuthService } from '@auth0/auth0-angular';
 
 @Component({
   selector: 'app-root',
-  standalone: true,        // important for Angular standalone setup
-  imports: [Landing],      // Landing will handle Dashboard internally
-  template: `<app-landing></app-landing>`,  // inline template for simplicity
+  standalone: true,
+  imports: [RouterOutlet],  // only RouterOutlet is imported here
+  template: `<router-outlet></router-outlet>`,
   styleUrls: ['./app.css']
 })
 export class App {
   protected readonly title = signal('digital-literacy-app');
-}
+
+  
+  }
+
