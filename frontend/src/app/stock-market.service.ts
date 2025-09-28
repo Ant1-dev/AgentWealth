@@ -39,6 +39,8 @@ export class StockMarketService {
     'GOOGL': { symbol: 'GOOGL', name: 'Alphabet Inc.', price: 138.50, change: -0.75, changePercent: -0.54, dayHigh: 139.25, dayLow: 137.80, yearHigh: 155.20, yearLow: 115.83, marketCap: 1730000000000, volume: 25000000 },
     'MSFT': { symbol: 'MSFT', name: 'Microsoft Corp.', price: 370.80, change: 2.10, changePercent: 0.57, dayHigh: 371.50, dayLow: 369.00, yearHigh: 430.82, yearLow: 309.49, marketCap: 2750000000000, volume: 28000000 },
     'AMZN': { symbol: 'AMZN', name: 'Amazon.com, Inc.', price: 175.00, change: -1.20, changePercent: -0.68, dayHigh: 176.00, dayLow: 174.50, yearHigh: 191.70, yearLow: 118.35, marketCap: 1820000000000, volume: 45000000 },
+    'TSLA': { symbol: 'TSLA', name: 'Tesla, Inc.', price: 250.00, change: 5.50, changePercent: 2.25, dayHigh: 252.00, dayLow: 248.00, yearHigh: 299.29, yearLow: 152.37, marketCap: 800000000000, volume: 100000000 },
+    'NVDA': { symbol: 'NVDA', name: 'NVIDIA Corporation', price: 450.00, change: -8.20, changePercent: -1.79, dayHigh: 460.00, dayLow: 448.00, yearHigh: 502.66, yearLow: 204.67, marketCap: 1100000000000, volume: 60000000 },
   };
 
   private mockSearchResults: StockSearchResult[] = [
@@ -106,5 +108,17 @@ export class StockMarketService {
       data.push({ date: date.toISOString().split('T')[0], close: parseFloat(lastClose.toFixed(2)) });
     }
     return of(data);
+  }
+
+  /**
+   * Gets the top moving stocks (gainers and losers).
+   * @returns An observable of top movers.
+   */
+  getTopMovers(): Observable<{ gainers: StockQuote[], losers: StockQuote[] }> {
+    const stocks = Object.values(this.mockStocks);
+    const sorted = stocks.sort((a, b) => b.changePercent - a.changePercent);
+    const gainers = sorted.slice(0, 3);
+    const losers = sorted.slice(-3).reverse();
+    return of({ gainers, losers });
   }
 }

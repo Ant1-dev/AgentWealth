@@ -36,6 +36,8 @@ export class DigitalFinancialLiteracy implements OnInit, OnDestroy {
   chartRange = signal<string>('1Y');
   mockQuotes: { [key: string]: StockQuote } = {};
 
+  topMovers = signal<{ gainers: StockQuote[], losers: StockQuote[] }>({ gainers: [], losers: [] });
+
   // --- Computed Values ---
   portfolioValue = computed(() => {
     return this.portfolio().reduce((total, holding) => {
@@ -68,6 +70,9 @@ export class DigitalFinancialLiteracy implements OnInit, OnDestroy {
     // Load default stock
     this.selectStock('AAPL');
     
+    // Load top movers
+    this.loadTopMovers();
+
     // Simulate real-time updates for portfolio
     setInterval(() => this.updatePortfolioQuotes(), 5000);
   }
@@ -215,5 +220,11 @@ export class DigitalFinancialLiteracy implements OnInit, OnDestroy {
     });
     // Trigger portfolio value recalculation by creating a new array
     this.portfolio.set([...this.portfolio()]); 
+  }
+
+  private loadTopMovers(): void {
+    this.stockMarketService.getTopMovers().subscribe(movers => {
+      this.topMovers.set(movers);
+    });
   }
 }

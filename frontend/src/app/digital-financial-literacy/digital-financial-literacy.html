@@ -33,7 +33,7 @@
         <div class="trade-box">
           <label for="buy-qty">Buy</label>
           <input id="buy-qty" type="number" [(ngModel)]="buyQuantity" min="1" placeholder="Quantity" />
-          <button (click)="buyStock()" [disabled]="!buyQuantity || buyQuantity <= 0">Buy</button>
+          <button class="buy" (click)="buyStock()" [disabled]="!buyQuantity || buyQuantity <= 0">Buy</button>
           <div class="trade-cost" *ngIf="buyQuantity">
             Cost: ${{ (buyQuantity * stock.price).toFixed(2) }}
           </div>
@@ -41,13 +41,29 @@
         <div class="trade-box">
           <label for="sell-qty">Sell</label>
           <input id="sell-qty" type="number" [(ngModel)]="sellQuantity" min="1" placeholder="Quantity" />
-          <button (click)="sellStock()" [disabled]="!sellQuantity || sellQuantity <= 0">Sell</button>
+          <button class="sell" (click)="sellStock()" [disabled]="!sellQuantity || sellQuantity <= 0">Sell</button>
           <div class="trade-cost" *ngIf="sellQuantity">
             Value: ${{ (sellQuantity * stock.price).toFixed(2) }}
           </div>
         </div>
       </div>
     </ng-container>
+
+    <div class="panel-section top-movers-section">
+      <h4>Top Movers</h4>
+      <div class="mover-list">
+        <h5>Gainers</h5>
+        <div class="mover-item" *ngFor="let gainer of topMovers().gainers" (click)="selectStock(gainer.symbol)">
+          <span class="mover-info">{{ gainer.symbol }}</span>
+          <span class="mover-change positive">+{{ gainer.changePercent.toFixed(2) }}%</span>
+        </div>
+        <h5>Losers</h5>
+        <div class="mover-item" *ngFor="let loser of topMovers().losers" (click)="selectStock(loser.symbol)">
+          <span class="mover-info">{{ loser.symbol }}</span>
+          <span class="mover-change negative">{{ loser.changePercent.toFixed(2) }}%</span>
+        </div>
+      </div>
+    </div>
 
     <div *ngIf="!selectedStock()" class="panel-section placeholder">
       <p>Search for a stock to get started.</p>
