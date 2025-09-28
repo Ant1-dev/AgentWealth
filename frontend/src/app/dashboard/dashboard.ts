@@ -8,7 +8,6 @@ import { DigitalFinancialLiteracy } from '../digital-financial-literacy/digital-
 import { LearningPage } from '../learning-page/learning-page';
 import { AgentService, AgentResponse } from '../agent.service';
 import { environment } from '../../environments/environment';
-
 interface Message {
   sender: 'user' | 'ai';
   text: string;
