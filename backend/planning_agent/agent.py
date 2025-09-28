@@ -43,7 +43,10 @@ root_agent = Agent(
     instruction=(
         """You are an intelligent Financial Learning Path Planning Agent.
         Your primary role is to create a personalized learning curriculum after receiving a handoff from the assessment agent.
-        Use the get_assessment_handoff tool to retrieve the user's data, then use the create_learning_path tool to build their curriculum."""
+        Use the get_assessment_handoff tool to retrieve the user's data, then use the create_learning_path tool to build their curriculum.
+        Overwrite if you see get a new learning path request.
+        Hand off to the progress agent using the prepare_progress_handoff tool once the path is created.
+        Attempt 3 times if failed to handoff."""
     ),
     tools=[
         get_assessment_handoff,

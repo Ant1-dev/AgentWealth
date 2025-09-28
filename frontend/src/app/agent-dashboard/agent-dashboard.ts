@@ -35,7 +35,7 @@ interface DashboardStats {
   standalone: true,
   imports: [CommonModule],
   templateUrl: './agent-dashboard.html',
-  styleUrls: ['./agent-dashboard.css']
+  styleUrls: ['./agent-dashboard.css'],
 })
 export class AgentDashboard implements OnInit, OnDestroy {
   private auth = inject(AuthService);
@@ -49,7 +49,7 @@ export class AgentDashboard implements OnInit, OnDestroy {
     activeAgents: 4,
     overallProgress: 0,
     completedModules: 0,
-    totalModules: 0
+    totalModules: 0,
   });
   planningInsights = signal<string[]>([]);
   learningPlan = signal<any>(null);
@@ -68,7 +68,7 @@ export class AgentDashboard implements OnInit, OnDestroy {
   overallProgress = computed(() => this.dashboardStats().overallProgress);
 
   ngOnInit(): void {
-    this.auth.user$.subscribe(user => {
+    this.auth.user$.subscribe((user) => {
       if (user?.sub) {
         this.userId.set(user.sub);
         console.log('User ID set:', user.sub);
@@ -92,6 +92,11 @@ export class AgentDashboard implements OnInit, OnDestroy {
     this.setFallbackData();
 
     try {
+      // First, orchestrate the agent handoff chain
+      console.log('🔄 Starting agent handoff chain...');
+      await this.orchestrateAgentHandoffs(currentUserId);
+
+      // Then load all agent data
       await Promise.race([
         this.loadAllAgentData(),
         new Promise((_, reject) =>
@@ -111,12 +116,100 @@ export class AgentDashboard implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Orchestrates the complete agent handoff chain:
+   * 1. Planning Agent gets assessment handoff
+   * 2. Planning Agent creates learning path
+   * 3. Planning Agent hands off to Progress Agent
+   * 4. Progress Agent hands off to Content Agent
+   */
+  private async orchestrateAgentHandoffs(userId: string): Promise<void> {
+    try {
+      console.log('📋 Step 1: Planning Agent retrieving assessment handoff...');
+      
+      // Step 1: Planning Agent gets assessment handoff
+      const assessmentHandoff = await this.sendToPlanningAgent(
+        userId,
+        `Get assessment handoff for user_id: ${userId}. Use get_assessment_handoff tool.`
+      );
+      
+      console.log('Assessment Handoff Response:', assessmentHandoff);
+
+      // Check if assessment exists
+      if (assessmentHandoff.response.includes('No assessment handoff found')) {
+        console.log('⚠️ No assessment found - user needs to complete assessment first');
+        return;
+      }
+
+      console.log('✅ Assessment handoff retrieved successfully');
+      console.log('🎯 Step 2: Planning Agent creating learning path...');
+
+      // Step 2: Planning Agent creates learning path
+      const learningPathResponse = await this.sendToPlanningAgent(
+        userId,
+        `Create learning path for user_id: ${userId}. Use create_learning_path tool.`
+      );
+
+      console.log('Learning Path Creation Response:', learningPathResponse);
+
+      if (learningPathResponse.response.includes('Learning Path Created')) {
+        console.log('✅ Learning path created successfully');
+        console.log('🚀 Step 3: Planning Agent handing off to Progress Agent...');
+
+        // Step 3: Planning Agent hands off to Progress Agent
+        const progressHandoff = await this.sendToPlanningAgent(
+          userId,
+          `Prepare progress handoff for user_id: ${userId}, message: "Learning path ready for progress tracking". Use prepare_progress_handoff tool.`
+        );
+
+        console.log('Progress Handoff Response:', progressHandoff);
+
+        if (progressHandoff.response.includes('Progress Agent Handoff Prepared')) {
+          console.log('✅ Progress Agent handoff prepared');
+          console.log('📊 Step 4: Progress Agent receiving handoff...');
+
+          // Step 4: Progress Agent receives handoff
+          const progressReceive = await this.sendToProgressAgent(
+            userId,
+            `Get planning handoff for user_id: ${userId}. Use get_planning_handoff tool.`
+          );
+
+          console.log('Progress Agent Handoff Reception:', progressReceive);
+
+          if (progressReceive.response.includes('Learning Path Received')) {
+            console.log('✅ Progress Agent received handoff successfully');
+            console.log('📚 Step 5: Progress Agent handing off to Content Agent...');
+
+            // Step 5: Progress Agent hands off to Content Agent (if you have this tool)
+            try {
+              const contentHandoff = await this.sendToProgressAgent(
+                userId,
+                `Prepare content handoff for user_id: ${userId}, message: "User ready for content delivery". Use prepare_content_handoff tool.`
+              );
+
+              console.log('Content Agent Handoff Response:', contentHandoff);
+              console.log('✅ All agent handoffs completed successfully!');
+            } catch (error) {
+              console.log('ℹ️ Content handoff tool not available, skipping...');
+            }
+          }
+        }
+      } else {
+        console.log('⚠️ Learning path creation failed or incomplete');
+      }
+
+    } catch (error) {
+      console.error('❌ Error in agent handoff chain:', error);
+      throw error;
+    }
+  }
+
   private setFallbackData(): void {
     this.dashboardStats.set({
       activeAgents: 4,
       overallProgress: 33,
       completedModules: 2,
-      totalModules: 6
+      totalModules: 6,
     });
 
     this.learningModules.set([
@@ -125,14 +218,14 @@ export class AgentDashboard implements OnInit, OnDestroy {
       { name: 'Portfolio Building', progress: 0, status: 'in-progress' },
       { name: 'Retirement Planning', progress: 0, status: 'upcoming' },
       { name: 'Financial Goals', progress: 0, status: 'upcoming' },
-      { name: 'Budgeting Fundamentals', progress: 0, status: 'upcoming' }
+      { name: 'Budgeting Fundamentals', progress: 0, status: 'upcoming' },
     ]);
 
     this.planningInsights.set([
       'Risk Profile: Moderate investor with personalized strategies',
       'Learning Approach: Visual learning optimized for maximum retention',
       'Learning Path: 6 personalized modules designed for your level',
-      'Timeline: 8-12 hours to complete your financial education'
+      'Timeline: 8-12 hours to complete your financial education',
     ]);
 
     this.agents.set([
@@ -141,35 +234,36 @@ export class AgentDashboard implements OnInit, OnDestroy {
         status: 'Active',
         task: 'Analyzing financial literacy patterns across users...',
         decision: 'Detected beginner level - recommending foundational investment concepts',
-        lastUpdate: new Date()
+        lastUpdate: new Date(),
       },
       {
         name: 'Planning Agent',
         status: 'Thinking',
         task: 'Creating personalized learning curriculum...',
-        prediction: 'Optimal learning path: Investment Basics → Risk Management → Portfolio Building',
-        lastUpdate: new Date()
+        prediction:
+          'Optimal learning path: Investment Basics → Risk Management → Portfolio Building',
+        lastUpdate: new Date(),
       },
       {
         name: 'Progress Agent',
         status: 'Monitoring',
         task: 'Tracking learning progress and engagement...',
         prediction: '85% probability of completing next module within 3 days',
-        lastUpdate: new Date()
+        lastUpdate: new Date(),
       },
       {
         name: 'Content Delivery Agent',
         status: 'Active',
         task: 'Preparing personalized financial education content...',
         decision: 'Adapting content for visual learning style with interactive examples',
-        lastUpdate: new Date()
-      }
+        lastUpdate: new Date(),
+      },
     ]);
 
     this.learningPlan.set({
       exists: true,
       created: new Date().toISOString(),
-      modules: 6
+      modules: 6,
     });
   }
 
@@ -178,10 +272,15 @@ export class AgentDashboard implements OnInit, OnDestroy {
       this.loadDashboardStats(),
       this.loadLearningModules(),
       this.loadPlanningInsights(),
-      this.loadAgentActivities()
+      this.loadAgentActivities(),
     ]);
 
-    const agentNames = ['Dashboard Stats', 'Learning Modules', 'Planning Insights', 'Agent Activities'];
+    const agentNames = [
+      'Dashboard Stats',
+      'Learning Modules',
+      'Planning Insights',
+      'Agent Activities',
+    ];
     results.forEach((result, index) => {
       if (result.status === 'rejected') {
         console.log(`${agentNames[index]} failed, using fallback data:`, result.reason);
@@ -206,7 +305,7 @@ export class AgentDashboard implements OnInit, OnDestroy {
           activeAgents: response.data.active_agents || 4,
           overallProgress: response.data.overall_progress || 0,
           completedModules: response.data.completed_modules || 0,
-          totalModules: response.data.total_modules || 0
+          totalModules: response.data.total_modules || 0,
         });
       } else {
         const stats = this.parseDashboardStatsFromText(response.response || '');
@@ -234,16 +333,17 @@ export class AgentDashboard implements OnInit, OnDestroy {
           status: module.status || 'upcoming',
           topic: module.topic,
           difficulty: module.difficulty,
-          duration: module.duration
+          duration: module.duration,
         }));
 
         this.learningModules.set(modules);
 
-        this.dashboardStats.update(stats => ({
+        this.dashboardStats.update((stats) => ({
           ...stats,
           totalModules: response.data.total_modules || modules.length,
-          completedModules: response.data.completed_count || modules.filter(m => m.status === 'completed').length,
-          overallProgress: response.data.overall_progress || stats.overallProgress
+          completedModules:
+            response.data.completed_count || modules.filter((m) => m.status === 'completed').length,
+          overallProgress: response.data.overall_progress || stats.overallProgress,
         }));
       } else {
         const modules = this.parseLearningModulesFromText(response.response || '');
@@ -283,7 +383,7 @@ export class AgentDashboard implements OnInit, OnDestroy {
     try {
       const response = await this.sendToAssessmentAgent(
         currentUserId,
-        `Get agent activities for user_id: ${currentUserId}. Use get_agent_activities tool.`
+        `Get agent activities for Use get_agent_activities tool.`
       );
 
       if (response.status === 'success' && response.data && response.data.agents) {
@@ -293,7 +393,7 @@ export class AgentDashboard implements OnInit, OnDestroy {
           task: agent.task,
           decision: agent.decision,
           prediction: agent.prediction,
-          lastUpdate: new Date(agent.last_update || Date.now())
+          lastUpdate: new Date(agent.last_update || Date.now()),
         }));
 
         this.agents.set(agents);
@@ -312,7 +412,7 @@ export class AgentDashboard implements OnInit, OnDestroy {
       activeAgents: this.extractNumber(text, /active[_ ]agents?[:\s]*(\d+)/i) || 4,
       overallProgress: this.extractNumber(text, /progress[:\s]*(\d+)/i) || 0,
       completedModules: this.extractNumber(text, /completed[_ ]modules?[:\s]*(\d+)/i) || 0,
-      totalModules: this.extractNumber(text, /total[_ ]modules?[:\s]*(\d+)/i) || 0
+      totalModules: this.extractNumber(text, /total[_ ]modules?[:\s]*(\d+)/i) || 0,
     };
   }
 
@@ -327,7 +427,7 @@ export class AgentDashboard implements OnInit, OnDestroy {
           modules.push({
             name: parts[1].trim(),
             progress,
-            status: progress === 100 ? 'completed' : progress > 0 ? 'in-progress' : 'upcoming'
+            status: progress === 100 ? 'completed' : progress > 0 ? 'in-progress' : 'upcoming',
           });
         }
       });
@@ -348,13 +448,14 @@ export class AgentDashboard implements OnInit, OnDestroy {
     if (text.includes('Total Modules:')) {
       const modulesMatch = text.match(/Total Modules:\s*(\d+)/i);
       if (modulesMatch) {
-        insights.push(`Learning Path: ${modulesMatch[1]} personalized modules designed for your level`);
+        insights.push(
+          `Learning Path: ${modulesMatch[1]} personalized modules designed for your level`
+        );
       }
     }
-    return insights.length > 0 ? insights : [
-      'Personalized learning plan being created',
-      'Complete assessment to unlock full insights'
-    ];
+    return insights.length > 0
+      ? insights
+      : ['Personalized learning plan being created', 'Complete assessment to unlock full insights'];
   }
 
   private parseAgentActivitiesFromText(_text: string): AgentStatus[] {
@@ -380,43 +481,48 @@ export class AgentDashboard implements OnInit, OnDestroy {
         'Analyzing user financial knowledge patterns...',
         'Evaluating risk tolerance preferences...',
         'Processing assessment responses...',
-        'Identifying knowledge gaps...'
+        'Identifying knowledge gaps...',
       ],
       'Planning Agent': [
         'Optimizing learning curriculum sequence...',
         'Adjusting module difficulty levels...',
         'Creating personalized study plans...',
-        'Analyzing learning path effectiveness...'
+        'Analyzing learning path effectiveness...',
       ],
       'Progress Agent': [
         'Monitoring learning engagement metrics...',
         'Tracking module completion rates...',
         'Analyzing user progress patterns...',
-        'Adapting difficulty based on performance...'
+        'Adapting difficulty based on performance...',
       ],
       'Content Delivery Agent': [
         'Preparing next lesson materials...',
         'Customizing content for learning style...',
         'Generating practice exercises...',
-        'Optimizing content delivery sequence...'
-      ]
+        'Optimizing content delivery sequence...',
+      ],
     };
 
     const currentAgents = this.agents();
-    const updatedAgents = currentAgents.map(agent => {
+    const updatedAgents = currentAgents.map((agent) => {
       const agentTasks = tasks[agent.name as keyof typeof tasks] || [agent.task];
       const randomTask = agentTasks[Math.floor(Math.random() * agentTasks.length)];
       return { ...agent, task: randomTask, lastUpdate: new Date() };
     });
 
-    const agentNames = ['Assessment Agent', 'Planning Agent', 'Progress Agent', 'Content Delivery Agent'];
-    agentNames.forEach(name => {
-      if (!updatedAgents.find(agent => agent.name === name)) {
+    const agentNames = [
+      'Assessment Agent',
+      'Planning Agent',
+      'Progress Agent',
+      'Content Delivery Agent',
+    ];
+    agentNames.forEach((name) => {
+      if (!updatedAgents.find((agent) => agent.name === name)) {
         updatedAgents.push({
           name,
           status: 'Active',
           task: tasks[name as keyof typeof tasks][0],
-          lastUpdate: new Date()
+          lastUpdate: new Date(),
         });
       }
     });
@@ -428,8 +534,8 @@ export class AgentDashboard implements OnInit, OnDestroy {
   private sendToAssessmentAgent(userId: string, message: string): Promise<any> {
     return new Promise((resolve, reject) => {
       this.agentService.sendToAssessmentAgent(userId, message).subscribe({
-        next: response => resolve(response),
-        error: error => reject(error)
+        next: (response) => resolve(response),
+        error: (error) => reject(error),
       });
     });
   }
@@ -437,8 +543,8 @@ export class AgentDashboard implements OnInit, OnDestroy {
   private sendToPlanningAgent(userId: string, message: string): Promise<any> {
     return new Promise((resolve, reject) => {
       this.agentService.sendToPlanningAgent(userId, message).subscribe({
-        next: response => resolve(response),
-        error: error => reject(error)
+        next: (response) => resolve(response),
+        error: (error) => reject(error),
       });
     });
   }
@@ -446,8 +552,8 @@ export class AgentDashboard implements OnInit, OnDestroy {
   private sendToProgressAgent(userId: string, message: string): Promise<any> {
     return new Promise((resolve, reject) => {
       this.agentService.sendToProgressAgent(userId, message).subscribe({
-        next: response => resolve(response),
-        error: error => reject(error)
+        next: (response) => resolve(response),
+        error: (error) => reject(error),
       });
     });
   }
@@ -459,7 +565,9 @@ export class AgentDashboard implements OnInit, OnDestroy {
   async continuelearning(): Promise<void> {
     const currentUserId = this.userId();
     if (!currentUserId) return;
-    const nextModule = this.learningModules().find(m => m.status === 'in-progress' || m.status === 'upcoming');
+    const nextModule = this.learningModules().find(
+      (m) => m.status === 'in-progress' || m.status === 'upcoming'
+    );
     if (nextModule) {
       console.log(`Starting: ${nextModule.name}`);
       await this.startLearningModule(nextModule.name);
@@ -470,7 +578,7 @@ export class AgentDashboard implements OnInit, OnDestroy {
     const currentUserId = this.userId();
     if (!currentUserId) return;
     try {
-      const moduleIndex = this.learningModules().findIndex(m => m.name === moduleName);
+      const moduleIndex = this.learningModules().findIndex((m) => m.name === moduleName);
       const moduleNumber = moduleIndex + 1;
       const response = await this.sendToProgressAgent(
         currentUserId,
@@ -488,7 +596,7 @@ export class AgentDashboard implements OnInit, OnDestroy {
     const currentUserId = this.userId();
     if (!currentUserId) return;
     try {
-      const moduleIndex = this.learningModules().findIndex(m => m.name === moduleName);
+      const moduleIndex = this.learningModules().findIndex((m) => m.name === moduleName);
       const moduleNumber = moduleIndex + 1;
       const response = await this.sendToProgressAgent(
         currentUserId,
@@ -506,7 +614,7 @@ export class AgentDashboard implements OnInit, OnDestroy {
     const currentUserId = this.userId();
     if (!currentUserId) return;
     try {
-      const moduleIndex = this.learningModules().findIndex(m => m.name === moduleName);
+      const moduleIndex = this.learningModules().findIndex((m) => m.name === moduleName);
       const moduleNumber = moduleIndex + 1;
       const response = await this.sendToProgressAgent(
         currentUserId,
@@ -516,7 +624,7 @@ export class AgentDashboard implements OnInit, OnDestroy {
       await Promise.all([
         this.loadLearningModules(),
         this.loadPlanningInsights(),
-        this.loadDashboardStats()
+        this.loadDashboardStats(),
       ]);
     } catch (error) {
       console.error('Error completing module:', error);
@@ -530,7 +638,13 @@ export class AgentDashboard implements OnInit, OnDestroy {
       return;
     }
     console.log(`Testing agent integration with history for user: ${currentUserId}`);
+    
     try {
+      // First run the complete handoff chain
+      console.log('🔄 Running complete agent handoff chain...');
+      await this.orchestrateAgentHandoffs(currentUserId);
+      
+      // Then load all dashboard data
       await Promise.all([
         this.loadAgentActivities(),
         this.loadPlanningInsights(),
@@ -538,65 +652,134 @@ export class AgentDashboard implements OnInit, OnDestroy {
         this.loadDashboardStats()
       ]);
       console.log('Agent data refreshed with history context');
+      
+      // Debug handoff status
+      console.log('🔍 Debugging handoff status...');
+      await this.debugHandoffStatus(currentUserId);
+      
     } catch (error) {
       console.error('Error testing user history:', error);
     }
   }
 
-  // Add inside AgentDashboard class
+  /**
+   * Debug method to check the status of all handoffs
+   */
+  private async debugHandoffStatus(userId: string): Promise<void> {
+    try {
+      console.log('📋 Checking Assessment → Planning handoff...');
+      const assessmentHandoff = await this.sendToPlanningAgent(
+        userId,
+        `Get assessment handoff for user_id: ${userId}. Use get_assessment_handoff tool.`
+      );
+      console.log('Assessment handoff status:', assessmentHandoff.response);
 
-// Convert progress number (0-100) into a percentage string for CSS width
-getProgressBarWidth(progress: number): string {
-  return `${progress}%`;
-}
+      console.log('📚 Checking user learning path...');
+      const learningPath = await this.sendToPlanningAgent(
+        userId,
+        `Get user learning path for user_id: ${userId}. Use get_user_learning_path tool.`
+      );
+      console.log('Learning path status:', learningPath.response);
 
-// Stub for button action (expand progress view, show modal, etc.)
-viewAllProgress(): void {
-  console.log("View all progress clicked");
-  // You can later add modal or navigation here
-}
+      console.log('🚀 Checking Planning → Progress handoff...');
+      const progressHandoff = await this.sendToProgressAgent(
+        userId,
+        `Get planning handoff for user_id: ${userId}. Use get_planning_handoff tool.`
+      );
+      console.log('Progress handoff status:', progressHandoff.response);
 
-// === TEMPLATE HELPERS ===
+      console.log('📊 Checking database info...');
+      const dbInfo = await this.sendToPlanningAgent(
+        userId,
+        `Get database info for user_id: ${userId}. Use get_database_info tool.`
+      );
+      console.log('Database info:', dbInfo.response);
 
-// Launch practice trading (stub for now)
-practiceTrading(): void {
-  console.log("Practice trading clicked");
-  // TODO: add routing or modal logic later
-}
-
-// Fix for your earlier issue: ensure it requires arg
-formatUpdateTime(isoString?: string): string {
-  if (!isoString) return 'N/A';
-  const date = new Date(isoString);
-  return date.toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
-}
-
-// Return CSS class based on agent status
-getStatusClass(status: string): string {
-  switch (status) {
-    case 'Active': return 'status-active';
-    case 'Thinking': return 'status-thinking';
-    case 'Monitoring': return 'status-monitoring';
-    case 'Idle': return 'status-idle';
-    default: return 'status-unknown';
+    } catch (error) {
+      console.error('Error debugging handoff status:', error);
+    }
   }
-}
 
-// Return icon name for a module status
-getModuleStatusIcon(status: string): string {
-  switch (status) {
-    case 'completed': return 'check_circle';
-    case 'in-progress': return 'hourglass_top';
-    case 'not-started': return 'radio_button_unchecked';
-    default: return 'help_outline';
+  /**
+   * Manual trigger for testing the complete agent handoff chain
+   */
+  async triggerHandoffChain(): Promise<void> {
+    const currentUserId = this.userId();
+    if (!currentUserId) {
+      console.log('No user ID available for handoff chain');
+      return;
+    }
+    
+    console.log('🔄 Manually triggering agent handoff chain...');
+    try {
+      await this.orchestrateAgentHandoffs(currentUserId);
+      console.log('✅ Manual handoff chain completed');
+      
+      // Refresh dashboard data after handoffs
+      await this.loadAllAgentData();
+      console.log('📊 Dashboard data refreshed');
+    } catch (error) {
+      console.error('❌ Manual handoff chain failed:', error);
+    }
   }
-}
 
+  // Convert progress number (0-100) into a percentage string for CSS width
+  getProgressBarWidth(progress: number): string {
+    return `${progress}%`;
+  }
 
+  // Stub for button action (expand progress view, show modal, etc.)
+  viewAllProgress(): void {
+    console.log('View all progress clicked');
+    // You can later add modal or navigation here
+  }
+
+  // Launch practice trading (stub for now)
+  practiceTrading(): void {
+    console.log('Practice trading clicked');
+    // TODO: add routing or modal logic later
+  }
+
+  // Fix for your earlier issue: ensure it requires arg
+  formatUpdateTime(isoString?: string): string {
+    if (!isoString) return 'N/A';
+    const date = new Date(isoString);
+    return date.toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }
+
+  // Return CSS class based on agent status
+  getStatusClass(status: string): string {
+    switch (status) {
+      case 'Active':
+        return 'status-active';
+      case 'Thinking':
+        return 'status-thinking';
+      case 'Monitoring':
+        return 'status-monitoring';
+      case 'Idle':
+        return 'status-idle';
+      default:
+        return 'status-unknown';
+    }
+  }
+
+  // Return icon name for a module status
+  getModuleStatusIcon(status: string): string {
+    switch (status) {
+      case 'completed':
+        return 'check_circle';
+      case 'in-progress':
+        return 'hourglass_top';
+      case 'not-started':
+        return 'radio_button_unchecked';
+      default:
+        return 'help_outline';
+    }
+  }
 }

@@ -591,3 +591,217 @@ User Content Data:
         
     except Exception as e:
         return f"Error retrieving database info: {str(e)}"
+    
+def get_current_learning_state(user_id: str) -> str:
+    """Returns structured data about user's current learning position and content."""
+    try:
+        # Get user's learning path
+        learning_path = db.get_user_learning_path(user_id)
+        if not learning_path:
+            return json.dumps({
+                "status": "error",
+                "message": "ASSESSMENT_INCOMPLETE",
+                "data": None
+            })
+        
+        # Get user's current progress to determine position
+        progress_data = db.get_user_progress(user_id)
+        
+        # Determine current module and step
+        current_module_number = 1
+        current_step_number = 1
+        
+        if progress_data:
+            # Find the latest module with progress
+            for module_id, step_number, score, completed_at in progress_data:
+                module_num = int(module_id.replace("module_", ""))
+                if step_number < 100:  # Not completed yet
+                    current_module_number = module_num
+                    current_step_number = min(step_number + 1, 5)  # Next step or max 5
+                    break
+                elif step_number >= 100:  # Completed
+                    current_module_number = module_num + 1  # Next module
+                    current_step_number = 1
+        
+        modules = learning_path["path_data"].get("modules", [])
+        
+        # Ensure we don't exceed available modules
+        if current_module_number > len(modules):
+            current_module_number = len(modules)
+            current_step_number = 5  # Last step of last module
+        
+        if current_module_number < 1 or current_module_number > len(modules):
+            return json.dumps({
+                "status": "error", 
+                "message": f"Invalid module number: {current_module_number}",
+                "data": None
+            })
+        
+        # Get current module data
+        module = modules[current_module_number - 1]
+        topic = module.get("topic", "unknown")
+        difficulty = module.get("difficulty", "beginner")
+        learning_style = module.get("learning_style", "analytical")
+        risk_tolerance = learning_path["path_data"].get("risk_tolerance", "moderate")
+        
+        # Generate lesson steps for current module
+        steps = generate_lesson_steps(topic, difficulty, current_step_number)
+        current_step_data = steps[current_step_number - 1] if current_step_number <= len(steps) else steps[0]
+        
+        # Generate content for the module
+        content = generate_content_for_topic(topic, difficulty, learning_style, risk_tolerance)
+        
+        # Parse key concepts from content
+        key_concepts = []
+        content_library = {
+            "investment_basics": {
+                "beginner": [
+                    "Stocks represent ownership shares in companies",
+                    "Bonds are loans that pay regular interest", 
+                    "ETFs provide instant diversification",
+                    "Risk and return are related"
+                ]
+            },
+            "risk_management": {
+                "beginner": [
+                    "All investments carry some risk",
+                    "Higher risk often means higher potential returns",
+                    "Your risk tolerance depends on timeline and personality",
+                    "Diversification is the best risk management tool"
+                ]
+            }
+            # Add other topics as needed
+        }
+        
+        key_concepts = content_library.get(topic, {}).get(difficulty, [
+            f"Key concept 1 for {topic}",
+            f"Key concept 2 for {topic}",
+            f"Key concept 3 for {topic}"
+        ])
+        
+        # Generate quiz questions
+        quiz_questions = generate_quiz_for_topic(topic, difficulty)
+        
+        # Structure the response
+        response_data = {
+            "status": "success",
+            "data": {
+                "current_position": {
+                    "module_number": current_module_number,
+                    "step_number": current_step_number,
+                    "total_modules": len(modules),
+                    "total_steps": len(steps)
+                },
+                "module": {
+                    "number": current_module_number,
+                    "title": module.get('title', 'Unknown'),
+                    "topic": topic,
+                    "difficulty": difficulty,
+                    "learning_style": learning_style,
+                    "risk_tolerance": risk_tolerance,
+                    "risk_focus": module.get('risk_focus', 'Balanced approach')
+                },
+                "current_step": {
+                    "number": current_step_number,
+                    "title": current_step_data.get('title', 'Unknown Step'),
+                    "content": current_step_data.get('content', ''),
+                    "total_steps": len(steps)
+                },
+                "key_concepts": key_concepts,
+                "lesson_content": content,
+                "quiz_questions": quiz_questions,
+                "user_profile": {
+                    "learning_style": learning_style,
+                    "risk_tolerance": risk_tolerance
+                }
+            }
+        }
+        
+        return json.dumps(response_data)
+        
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Error retrieving learning state: {str(e)}",
+            "data": None
+        })
+    
+def check_assessment_status(user_id: str) -> str:
+    """Checks if user has completed their initial assessment and has a learning path.
+    
+    Args:
+        user_id (str): The user ID to check assessment status for
+    
+    Returns:
+        str: JSON response with assessment status and user guidance
+    """
+    try:
+        # Check if user has completed assessment by looking for learning path
+        learning_path = db.get_user_learning_path(user_id)
+        
+        if not learning_path:
+            return json.dumps({
+                "status": "assessment_incomplete",
+                "message": "ASSESSMENT_REQUIRED",
+                "data": {
+                    "assessment_complete": False,
+                    "user_guidance": {
+                        "title": "Complete Your Financial Assessment",
+                        "description": "To access personalized learning content, you need to complete a quick assessment.",
+                        "action_required": "Return to the main chat dashboard to begin your assessment",
+                        "estimated_time": "5-10 minutes",
+                        "benefits": [
+                            "Personalized learning path based on your knowledge level",
+                            "Content adapted to your learning style", 
+                            "Customized examples for your risk tolerance",
+                            "Progress tracking tailored to your goals"
+                        ]
+                    },
+                    "next_steps": [
+                        "Navigate to the main chat dashboard",
+                        "Start conversation with the Assessment Agent",
+                        "Answer questions about your financial knowledge",
+                        "Receive your personalized learning plan"
+                    ]
+                }
+            })
+        
+        # Assessment is complete - check progress
+        progress_data = db.get_user_progress(user_id)
+        path_data = learning_path.get("path_data", {})
+        risk_tolerance = path_data.get("risk_tolerance", "moderate")
+        learning_style = path_data.get("learning_style", "analytical")
+        
+        return json.dumps({
+            "status": "assessment_complete", 
+            "message": "READY_FOR_LEARNING",
+            "data": {
+                "assessment_complete": True,
+                "user_profile": {
+                    "risk_tolerance": risk_tolerance,
+                    "learning_style": learning_style,
+                    "assessment_date": learning_path.get("created_at", "Unknown")
+                },
+                "progress_summary": {
+                    "modules_available": len(path_data.get("modules", [])),
+                    "progress_entries": len(progress_data) if progress_data else 0,
+                    "learning_path_ready": True
+                },
+                "welcome_message": f"Welcome back! Your {learning_style} learning path is ready with {risk_tolerance} risk-focused content."
+            }
+        })
+        
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Error checking assessment status: {str(e)}",
+            "data": {
+                "assessment_complete": False,
+                "error_details": str(e),
+                "user_guidance": {
+                    "title": "System Error",
+                    "description": "There was an error checking your assessment status.",
+                    "action_required": "Please try refreshing the page or contact support"
+                }
+            }
+        })

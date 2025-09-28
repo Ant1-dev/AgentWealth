@@ -18,7 +18,9 @@ from .tools.content_tools import (
     get_quiz_questions,
     get_database_info,
     process_content_requests,
-    send_content_response
+    send_content_response,
+    get_current_learning_state,
+    check_assessment_status,
 )
 from config import GOOGLE_API_KEY, USER_SESSIONS_DB_PATH
 
@@ -51,7 +53,9 @@ root_agent = Agent(
         get_quiz_questions,
         get_database_info,
         process_content_requests,
-        send_content_response
+        send_content_response,
+        get_current_learning_state,
+        check_assessment_status
     ]
 )
 

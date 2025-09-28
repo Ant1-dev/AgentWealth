@@ -5,17 +5,51 @@ import { AgentService } from '../agent.service';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 
-// Define the pipe directly in this file to avoid creating a new file
+// Safe HTML Pipe
 @Pipe({
   name: 'safeHtml',
   standalone: true,
 })
 export class SafeHtmlPipe implements PipeTransform {
   constructor(private sanitizer: DomSanitizer) {}
-
   transform(value: string): SafeHtml {
     return this.sanitizer.bypassSecurityTrustHtml(value);
   }
+}
+
+// Enhanced Interfaces based on get_current_learning_state response
+interface LearningState {
+  status: string;
+  data: {
+    current_position: {
+      module_number: number;
+      step_number: number;
+      total_modules: number;
+      total_steps: number;
+    };
+    module: {
+      number: number;
+      title: string;
+      topic: string;
+      difficulty: string;
+      learning_style: string;
+      risk_tolerance: string;
+      risk_focus: string;
+    };
+    current_step: {
+      number: number;
+      title: string;
+      content: string;
+      total_steps: number;
+    };
+    key_concepts: string[];
+    lesson_content: string;
+    quiz_questions: QuizQuestion[];
+    user_profile: {
+      learning_style: string;
+      risk_tolerance: string;
+    };
+  } | null;
 }
 
 interface QuizQuestion {
@@ -24,25 +58,15 @@ interface QuizQuestion {
   correct: string;
 }
 
-interface LearningModule {
-  title: string;
-  content: string;
-  moduleNumber: number;
-  topic: string;
-  difficulty: string;
-}
-
-interface LearningStep {
-  title: string;
-  content: string;
-  stepNumber: number;
-  totalSteps: number;
-}
-
 interface ChatMessage {
-    text: string;
-    isUser: boolean;
-    timestamp: string;
+  text: string;
+  isUser: boolean;
+  timestamp: string;
+}
+
+interface AgentActivity {
+  activity: string;
+  decision: string;
 }
 
 @Component({
@@ -56,36 +80,56 @@ export class LearningPage implements OnInit {
   private auth = inject(AuthService);
   private agentService = inject(AgentService);
 
-  // State Signals
-  currentModule = signal<LearningModule | null>(null);
-  currentStep = signal<LearningStep | null>(null);
-  quizQuestions = signal<QuizQuestion[]>([]);
-  currentQuizIndex = signal<number>(0);
-  selectedAnswerIndex = signal<number | null>(null);
-  quizCompleted = signal<boolean>(false);
-  showQuizFeedback = signal<boolean>(false);
+  // Core Learning State - populated by get_current_learning_state
+  learningState = signal<LearningState | null>(null);
   isLoading = signal<boolean>(false);
   userId = signal<string | undefined>(undefined);
   assessmentIncomplete = signal<boolean>(true); // Start as true
+  
+  // Quiz Interaction State
+  selectedAnswerIndex = signal<number | null>(null);
+  quizCompleted = signal<boolean>(false);
+  showQuizFeedback = signal<boolean>(false);
+  currentQuizIndex = signal<number>(0);
   
   // Chat State
   chatMessages = signal<ChatMessage[]>([]);
   currentChatInput = signal<string>('');
   
   // Agent Activity State
-  agentActivities = signal<Array<{activity: string, decision: string}>>([]);
+  agentActivities = signal<AgentActivity[]>([]);
 
-  // Progress State
-  currentModuleNumber = signal<number>(1);
-  currentStepNumber = signal<number>(1);
+  // String reference for template
   readonly String = String;
 
-  // Computed properties
+  // Computed Properties - derived from learningState
+  currentModule = computed(() => this.learningState()?.data?.module || null);
+  currentStep = computed(() => this.learningState()?.data?.current_step || null);
+  currentPosition = computed(() => this.learningState()?.data?.current_position || null);
+  keyConcepts = computed(() => this.learningState()?.data?.key_concepts || []);
+  lessonContent = computed(() => this.learningState()?.data?.lesson_content || '');
+  quizQuestions = computed(() => this.learningState()?.data?.quiz_questions || []);
+  userProfile = computed(() => this.learningState()?.data?.user_profile || null);
+  
+  currentModuleNumber = computed(() => this.currentPosition()?.module_number || 1);
+  currentStepNumber = computed(() => this.currentPosition()?.step_number || 1);
+  totalModules = computed(() => this.currentPosition()?.total_modules || 1);
+  totalSteps = computed(() => this.currentPosition()?.total_steps || 1);
+  
+  // Quiz computed properties
   currentQuizQuestion = computed(() => this.quizQuestions()[this.currentQuizIndex()] || null);
   hasMoreQuestions = computed(() => this.currentQuizIndex() < this.quizQuestions().length - 1);
+  
+  // Progress computation
   progressPercentage = computed(() => {
-    const step = this.currentStep();
-    return step ? Math.round((this.currentStepNumber() / step.totalSteps) * 100) : 0;
+    const position = this.currentPosition();
+    if (!position) return 0;
+    
+    const moduleProgress = (position.module_number - 1) / position.total_modules;
+    const stepProgress = (position.step_number - 1) / position.total_steps;
+    const currentModuleProgress = stepProgress / position.total_modules;
+    
+    return Math.round((moduleProgress + currentModuleProgress) * 100);
   });
   
   // Computed property to determine if user can proceed (either quiz completed or no quiz available)
@@ -98,16 +142,20 @@ export class LearningPage implements OnInit {
     this.auth.user$.subscribe(user => {
       if (user?.sub) {
         this.userId.set(user.sub);
-        this.loadLearningContent();
+        this.loadCompleteLearningState();
       }
     });
   }
 
-  private async loadLearningContent(): Promise<void> {
+  /**
+   * Master method that loads all learning data using get_current_learning_state
+   */
+  private async loadCompleteLearningState(): Promise<void> {
     const currentUserId = this.userId();
     if (!currentUserId) return;
 
     this.isLoading.set(true);
+<<<<<<< HEAD
     this.agentActivities.set([]); 
     this.updateAgentActivity('Checking assessment status...');
 
@@ -148,11 +196,64 @@ export class LearningPage implements OnInit {
       console.error('Error loading learning content:', error);
       this.updateAgentDecision(`❌ Error: ${error}`);
       this.assessmentIncomplete.set(true);
+=======
+    this.agentActivities.set([]);
+    this.updateAgentActivity('Progress Agent', 'Checking handoff status...', 'Verifying assessment completion...');
+
+    try {
+      // First check if assessment is complete via Progress Agent
+      const handoffResponse = await this.sendToProgressAgent(
+        currentUserId,
+        `Check if planning handoff exists for user_id: ${currentUserId}. Use get_planning_handoff tool.`
+      );
+
+      if (handoffResponse.response.includes("No learning path handoff found")) {
+        this.assessmentIncomplete.set(true);
+        this.updateAgentActivity('Assessment Agent', 'Assessment incomplete', 'User needs to complete initial assessment');
+        return;
+      }
+
+      this.updateAgentActivity('Progress Agent', 'Handoff verified', 'Assessment complete, requesting learning state...');
+
+      // Now get complete learning state from Progress Agent using get_current_learning_state
+      const response = await this.sendToProgressAgent(
+        currentUserId,
+        `Get complete learning state for user_id: ${currentUserId}. Use get_current_learning_state tool.`
+      );
+
+      console.log('Learning State Response:', response);
+
+      // Parse the structured response
+      const learningStateData = this.parseLearningStateResponse(response.response);
+      
+      if (learningStateData && learningStateData.status === 'success') {
+        this.learningState.set(learningStateData);
+        this.assessmentIncomplete.set(false);
+        
+        this.updateAgentActivity('Content Agent', 'Learning state loaded successfully', 'All content and progress synchronized');
+        this.updateAgentActivity('Assessment Agent', 'User profile loaded', `Learning style: ${learningStateData.data?.user_profile.learning_style}, Risk tolerance: ${learningStateData.data?.user_profile.risk_tolerance}`);
+        
+        // Reset quiz state for current position
+        this.resetQuizState();
+        
+      } else if (learningStateData?.status === 'error' && learningStateData.data === null) {
+        this.assessmentIncomplete.set(true);
+        this.updateAgentActivity('Assessment Agent', 'Assessment required', 'User needs to complete initial assessment');
+      } else {
+        throw new Error('Invalid learning state response');
+      }
+
+    } catch (error) {
+      console.error('Error loading complete learning state:', error);
+      this.assessmentIncomplete.set(true);
+      this.updateAgentActivity('System', 'Error loading learning state', `Error: ${error}`);
+>>>>>>> 5d27834 (updated some agent logic)
     } finally {
       this.isLoading.set(false);
     }
   }
 
+<<<<<<< HEAD
   private async checkAssessmentStatus(): Promise<boolean> {
     const currentUserId = this.userId();
     if (!currentUserId) return false;
@@ -590,11 +691,28 @@ export class LearningPage implements OnInit {
     this.agentActivities.update(activities => {
       if (activities.length > 0) {
         activities[activities.length - 1].decision = decision;
+=======
+  /**
+   * Parse the JSON response from get_current_learning_state
+   */
+  private parseLearningStateResponse(responseText: string): LearningState | null {
+    try {
+      // Extract JSON from response text if it's wrapped in other text
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]) as LearningState;
+>>>>>>> 5d27834 (updated some agent logic)
       }
-      return [...activities];
-    });
+      
+      // Try parsing the entire response as JSON
+      return JSON.parse(responseText) as LearningState;
+    } catch (error) {
+      console.error('Error parsing learning state response:', error);
+      return null;
+    }
   }
 
+<<<<<<< HEAD
   private sendToAssessmentAgent(userId: string, message: string): Promise<any> {
     return new Promise((resolve, reject) => {
       this.agentService.sendToAssessmentAgent(userId, message).subscribe({
@@ -613,6 +731,159 @@ export class LearningPage implements OnInit {
     });
   }
 
+=======
+  /**
+   * Navigate to next step - updates progress and reloads state
+   */
+  async nextStep(): Promise<void> {
+    if (!this.quizCompleted()) {
+      this.addChatMessage("Please answer the question correctly to proceed.", false);
+      return;
+    }
+
+    const currentUserId = this.userId();
+    const position = this.currentPosition();
+    if (!currentUserId || !position) return;
+
+    this.isLoading.set(true);
+    this.updateAgentActivity('Progress Agent', 'Saving progress and advancing...', 'Updating user progress');
+
+    try {
+      // Save current progress via Progress Agent
+      await this.sendToProgressAgent(
+        currentUserId,
+        `Save progress for user_id: ${currentUserId}, module: ${position.module_number}, step: ${position.step_number + 1}, score: 100. Use save_progress tool.`
+      );
+
+      // Reload complete learning state from Progress Agent (which has get_current_learning_state)
+      await this.loadCompleteLearningState();
+      
+      this.updateAgentActivity('Progress Agent', 'Progress saved successfully', 'Advanced to next step');
+
+    } catch (error) {
+      console.error('Error advancing to next step:', error);
+      this.updateAgentActivity('Progress Agent', 'Error saving progress', `Error: ${error}`);
+    } finally {
+      this.isLoading.set(false);
+    }
+  }
+
+  /**
+   * Navigate to previous step - reloads state for previous position
+   */
+  async previousStep(): Promise<void> {
+    const currentUserId = this.userId();
+    const position = this.currentPosition();
+    if (!currentUserId || !position) return;
+
+    // Don't allow going before first step of first module
+    if (position.module_number === 1 && position.step_number === 1) return;
+
+    this.isLoading.set(true);
+    this.updateAgentActivity('Progress Agent', 'Moving to previous step...', 'Updating position');
+
+    try {
+      let targetModule = position.module_number;
+      let targetStep = position.step_number - 1;
+
+      // If we're at step 1, go to last step of previous module
+      if (targetStep < 1 && targetModule > 1) {
+        targetModule = position.module_number - 1;
+        targetStep = 5; // Assuming 5 steps per module
+      }
+
+      // Save the new position via Progress Agent
+      await this.sendToProgressAgent(
+        currentUserId,
+        `Save progress for user_id: ${currentUserId}, module: ${targetModule}, step: ${targetStep}, score: 0. Use save_progress tool.`
+      );
+
+      // Reload complete learning state from Progress Agent
+      await this.loadCompleteLearningState();
+
+    } catch (error) {
+      console.error('Error going to previous step:', error);
+      this.updateAgentActivity('Progress Agent', 'Error moving to previous step', `Error: ${error}`);
+    } finally {
+      this.isLoading.set(false);
+    }
+  }
+
+  // Quiz Interaction Methods
+  selectAnswer(index: number): void {
+    if (this.showQuizFeedback()) return;
+    
+    this.selectedAnswerIndex.set(index);
+    this.showQuizFeedback.set(true);
+    
+    const quiz = this.currentQuizQuestion();
+    if (quiz && String.fromCharCode(65 + index) === quiz.correct) {
+      this.quizCompleted.set(true);
+      this.updateAgentActivity('Assessment Agent', 'Correct answer selected', 'Strong comprehension detected');
+    } else {
+      this.updateAgentActivity('Assessment Agent', 'Incorrect answer selected', 'Comprehension gap identified');
+    }
+  }
+
+  nextQuestion(): void {
+    if (this.hasMoreQuestions()) {
+      this.currentQuizIndex.set(this.currentQuizIndex() + 1);
+      this.resetQuizState();
+    }
+  }
+
+  private resetQuizState(): void {
+    this.quizCompleted.set(false);
+    this.selectedAnswerIndex.set(null);
+    this.showQuizFeedback.set(false);
+    this.currentQuizIndex.set(0);
+  }
+
+  // Chat Methods
+  async sendChatMessage(): Promise<void> {
+    const messageText = this.currentChatInput().trim();
+    if (!messageText) return;
+
+    this.addChatMessage(messageText, true);
+    this.currentChatInput.set('');
+    await this.getHelpFromAgent(messageText);
+  }
+
+  async sendQuickHelp(type: string): Promise<void> {
+    const helpTypes: Record<string, string> = {
+      'analogy': 'Can you explain this using an analogy?',
+      'examples': 'Can you give me some examples?',
+      'simplify': 'Can you simplify this explanation?'
+    };
+
+    const message = helpTypes[type] || 'Can you help me understand this better?';
+    this.addChatMessage(message, true);
+    
+    // Include current topic context for better help
+    const currentTopic = this.currentModule()?.topic || 'this lesson';
+    await this.getHelpFromAgent(`Provide ${type} help for ${currentTopic}. Current step: ${this.currentStep()?.title}`);
+  }
+
+  private async getHelpFromAgent(prompt: string): Promise<void> {
+    const currentUserId = this.userId();
+    if (!currentUserId) return;
+
+    try {
+      const response = await this.sendToContentAgent(currentUserId, prompt);
+      const helpMessage = response.response || "Sorry, I couldn't get a helpful answer right now.";
+      this.addChatMessage(helpMessage, false);
+    } catch (error) {
+      this.addChatMessage("There was a problem connecting to the help agent. Please try again.", false);
+    }
+  }
+
+  private addChatMessage(text: string, isUser: boolean): void {
+    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    this.chatMessages.update(messages => [...messages, { text, isUser, timestamp }]);
+  }
+
+  // Agent Communication
+>>>>>>> 5d27834 (updated some agent logic)
   private sendToProgressAgent(userId: string, message: string): Promise<any> {
     return new Promise((resolve, reject) => {
       this.agentService.sendToProgressAgent(userId, message).subscribe({
@@ -630,6 +901,7 @@ export class LearningPage implements OnInit {
       });
     });
   }
+<<<<<<< HEAD
   
   // --- USER INTERACTION METHODS ---
   selectTab(tabName: string): void {
@@ -770,6 +1042,15 @@ export class LearningPage implements OnInit {
       this.currentQuizIndex.set(this.currentQuizIndex() + 1);
       this.resetQuizState();
     }
+=======
+
+  // Agent Activity Tracking
+  private updateAgentActivity(agent: string, activity: string, decision: string = ''): void {
+    this.agentActivities.update(activities => [
+      ...activities,
+      { activity: `${agent}: ${activity}`, decision }
+    ]);
+>>>>>>> 5d27834 (updated some agent logic)
   }
 
   // Add a method to manually refresh the learning content

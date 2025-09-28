@@ -60,7 +60,8 @@ root_agent = Agent(
         get_database_info,
         get_content_from_delivery_agent,
         get_content_response,
-        get_learning_modules
+        get_learning_modules,
+        get_dashboard_stats
     ]
 )
 
