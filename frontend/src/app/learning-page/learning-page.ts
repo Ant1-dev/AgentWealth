@@ -1,8 +1,7 @@
 // src/app/learning-page/learning-page.ts
-import { Component, OnInit, inject, signal, computed } from '@angular/core';
+import { Component, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { AuthService } from '@auth0/auth0-angular';
-import { AgentService } from '../agent.service';
+import { FormsModule } from '@angular/forms';
 
 interface QuizQuestion {
   question: string;
@@ -10,10 +9,14 @@ interface QuizQuestion {
   correct: string;
 }
 
+interface ChatMessage {
+  text: string;
+  isUser: boolean;
+  timestamp: string;
+}
+
 interface LearningModule {
   title: string;
-  content: string;
-  moduleNumber: number;
   topic: string;
   difficulty: string;
 }
@@ -21,428 +24,362 @@ interface LearningModule {
 interface LearningStep {
   title: string;
   content: string;
-  stepNumber: number;
   totalSteps: number;
 }
 
 @Component({
   selector: 'app-learning-page',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, FormsModule],
   templateUrl: './learning-page.html',
   styleUrls: ['./learning-page.css']
 })
-export class LearningPage implements OnInit {
-  private auth = inject(AuthService);
-  private agentService = inject(AgentService);
-
-  // Signals for reactive state
-  currentModule = signal<LearningModule | null>(null);
-  currentStep = signal<LearningStep | null>(null);
-  quizQuestions = signal<QuizQuestion[]>([]);
-  currentQuizIndex = signal<number>(0);
-  selectedAnswerIndex = signal<number | null>(null);
-  quizCompleted = signal<boolean>(false);
-  showQuizFeedback = signal<boolean>(false);
-  isHelpPopupVisible = signal<boolean>(false);
-  isLoading = signal<boolean>(false);
-  userId = signal<string | undefined>(undefined);
+export class LearningPage {
+  // Make String available to template
   readonly String = String;
-  
-  // Learning progress
-  currentModuleNumber = signal<number>(1);
+
+  // Learning content signals
+  currentModule = signal<LearningModule>({
+    title: 'Introduction to Smart Investing',
+    topic: 'Investment Basics',
+    difficulty: 'Beginner'
+  });
+
+  currentStep = signal<LearningStep>({
+    title: 'Why Invest Your Money?',
+    content: `
+      <p>Investing helps your money grow over time through the power of compound interest.</p>
+      <p>Key benefits of investing:</p>
+      <ul>
+        <li><strong>Beat inflation:</strong> Keep your purchasing power</li>
+        <li><strong>Build wealth:</strong> Grow your money for future goals</li>
+        <li><strong>Financial freedom:</strong> Create passive income streams</li>
+      </ul>
+      <p>Even small amounts invested regularly can lead to significant wealth over time.</p>
+    `,
+    totalSteps: 5
+  });
+
+  // Quiz data with multiple questions per step
+  allQuizQuestions = signal<QuizQuestion[][]>([
+    // Step 1 questions
+    [
+      {
+        question: "What is the main benefit of investing your money instead of keeping it in a regular savings account?",
+        options: [
+          "Your money is completely safe from any loss",
+          "You can beat inflation and potentially grow wealth over time",
+          "You get immediate access to large returns",
+          "Banks pay you bonus interest for investing"
+        ],
+        correct: "B"
+      },
+      {
+        question: "What does compound interest mean?",
+        options: [
+          "Interest paid only once per year",
+          "Interest calculated on the original amount only",
+          "Interest earned on both principal and previously earned interest",
+          "Interest that decreases over time"
+        ],
+        correct: "C"
+      }
+    ],
+    // Step 2 questions
+    [
+      {
+        question: "What is the relationship between risk and return in investing?",
+        options: [
+          "Higher risk always guarantees higher returns",
+          "Lower risk investments always lose money",
+          "Generally, higher risk investments offer potential for higher returns",
+          "Risk and return are completely unrelated"
+        ],
+        correct: "C"
+      }
+    ],
+    // Step 3 questions
+    [
+      {
+        question: "Why are ETFs recommended for beginning investors?",
+        options: [
+          "They guarantee profits with no risk",
+          "They offer instant diversification with low fees",
+          "They only invest in the safest companies",
+          "They automatically time the market for you"
+        ],
+        correct: "B"
+      }
+    ]
+  ]);
+
+  // Navigation signals
   currentStepNumber = signal<number>(1);
-  
-  // Agent activities - now populated from real agent responses
+  currentModuleNumber = signal<number>(1);
+  currentQuestionIndex = signal<number>(0);
+
+  // Quiz state signals
+  selectedAnswerIndex = signal<number | null>(null);
+  showQuizFeedback = signal<boolean>(false);
+  quizCompleted = signal<boolean>(false);
+  isLoading = signal<boolean>(false);
+
+  // Chat signals
+  chatMessages = signal<ChatMessage[]>([
+    {
+      text: "Hi! I'm here to help you understand this lesson. Feel free to ask any questions!",
+      isUser: false,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }
+  ]);
+  currentChatInput = signal<string>('');
+
+  // Agent activities
   agentActivities = signal<Array<{activity: string, decision: string}>>([
-    { activity: 'Content Agent: Loading personalized learning materials...', decision: 'STATUS: Waiting for user progress data' },
-    { activity: 'Progress Agent: Checking handoff from planning...', decision: 'STATUS: Verifying learning path exists' },
-    { activity: 'Assessment Agent: Ready to adapt difficulty...', decision: 'STATUS: Monitoring comprehension signals' }
+    { activity: 'Content Agent: Loading personalized learning materials...', decision: 'STATUS: Module content ready' },
+    { activity: 'Progress Agent: Tracking comprehension signals...', decision: 'STATUS: Monitoring quiz performance' },
+    { activity: 'Assessment Agent: Adapting difficulty...', decision: 'STATUS: Ready to provide contextual help' }
   ]);
 
   // Computed properties
-  currentQuiz = computed(() => {
-    const questions = this.quizQuestions();
-    const index = this.currentQuizIndex();
-    return questions[index] || null;
+  progressPercentage = computed(() => {
+    const current = this.currentStepNumber();
+    const total = this.currentStep().totalSteps;
+    return Math.round((current / total) * 100);
+  });
+
+  currentQuizQuestion = computed(() => {
+    const stepIndex = this.currentStepNumber() - 1;
+    const questionIndex = this.currentQuestionIndex();
+    const questionsForStep = this.allQuizQuestions()[stepIndex];
+    
+    if (questionsForStep && questionIndex < questionsForStep.length) {
+      return questionsForStep[questionIndex];
+    }
+    return null;
   });
 
   hasMoreQuestions = computed(() => {
-    return this.currentQuizIndex() < this.quizQuestions().length - 1;
+    const stepIndex = this.currentStepNumber() - 1;
+    const questionIndex = this.currentQuestionIndex();
+    const questionsForStep = this.allQuizQuestions()[stepIndex];
+    
+    return questionsForStep && questionIndex < questionsForStep.length - 1;
   });
 
-  progressPercentage = computed(() => {
-    const current = this.currentStepNumber();
-    const step = this.currentStep();
-    if (!step) return 0;
-    return Math.round((current / step.totalSteps) * 100);
-  });
-
-  ngOnInit(): void {
-    // Get user ID and load learning content
-    this.auth.user$.subscribe(user => {
-      if (user?.sub) {
-        this.userId.set(user.sub);
-        this.loadLearningContent();
-      }
-    });
-  }
-
-  private async loadLearningContent(): Promise<void> {
-    const currentUserId = this.userId();
-    if (!currentUserId) return;
-
-    this.isLoading.set(true);
-
-    try {
-      // First, check if progress agent has content ready
-      await this.checkProgressHandoff();
-      
-      // Load current module content
-      await this.loadModuleContent(this.currentModuleNumber());
-      
-      // Load current step within module  
-      await this.loadLessonStep(this.currentModuleNumber(), this.currentStepNumber());
-      
-      // Load quiz questions for current module
-      await this.loadQuizQuestions(this.currentModuleNumber());
-
-    } catch (error) {
-      console.error('Error loading learning content:', error);
-    } finally {
-      this.isLoading.set(false);
-    }
-  }
-
-  private async checkProgressHandoff(): Promise<void> {
-    const currentUserId = this.userId();
-    if (!currentUserId) return;
-
-    try {
-      const response = await this.sendToProgressAgent(
-        currentUserId,
-        `Check if planning handoff exists for user_id: ${currentUserId}. Use get_planning_handoff tool.`
-      );
-
-      console.log('Progress Handoff Check:', response);
-
-      // Update agent activity with real response
-      this.updateAgentActivity('Progress Agent', 'Checking handoff from planning...', response.response?.substring(0, 60) || 'Handoff verified');
-
-    } catch (error) {
-      console.error('Error checking progress handoff:', error);
-    }
-  }
-
-  private async loadModuleContent(moduleNumber: number): Promise<void> {
-    const currentUserId = this.userId();
-    if (!currentUserId) return;
-
-    try {
-      const response = await this.sendToContentAgent(
-        currentUserId,
-        `Get module content for user_id: ${currentUserId}, module_number: ${moduleNumber}. Use get_module_content tool.`
-      );
-
-      console.log('Module Content Response:', response);
-
-      // Parse module content from agent response
-      this.parseModuleContent(response, moduleNumber);
-
-      // Update agent activity
-      this.updateAgentActivity('Content Agent', 'Loading personalized learning materials...', 'Module content delivered successfully');
-
-    } catch (error) {
-      console.error('Error loading module content:', error);
-    }
-  }
-
-  private async loadLessonStep(moduleNumber: number, stepNumber: number): Promise<void> {
-    const currentUserId = this.userId();
-    if (!currentUserId) return;
-
-    try {
-      const response = await this.sendToContentAgent(
-        currentUserId,
-        `Get lesson step for user_id: ${currentUserId}, module_number: ${moduleNumber}, step_number: ${stepNumber}. Use get_lesson_step tool.`
-      );
-
-      console.log('Lesson Step Response:', response);
-
-      // Parse lesson step from agent response
-      this.parseLessonStep(response, stepNumber);
-
-    } catch (error) {
-      console.error('Error loading lesson step:', error);
-    }
-  }
-
-  private async loadQuizQuestions(moduleNumber: number): Promise<void> {
-    const currentUserId = this.userId();
-    if (!currentUserId) return;
-
-    try {
-      const response = await this.sendToContentAgent(
-        currentUserId,
-        `Get quiz questions for user_id: ${currentUserId}, module_number: ${moduleNumber}. Use get_quiz_questions tool.`
-      );
-
-      console.log('Quiz Questions Response:', response);
-
-      // Parse quiz questions from agent response
-      this.parseQuizQuestions(response);
-
-    } catch (error) {
-      console.error('Error loading quiz questions:', error);
-    }
-  }
-
-  private parseModuleContent(response: any, moduleNumber: number): void {
-    const content = response.response || '';
-    
-    // Extract module title and content from agent response
-    const titleMatch = content.match(/Module \d+:\s*([^\n]+)/);
-    const title = titleMatch ? titleMatch[1] : `Financial Learning Module ${moduleNumber}`;
-    
-    // Extract topic and difficulty if present
-    const topicMatch = content.match(/Topic:\s*([^\n]+)/);
-    const difficultyMatch = content.match(/Difficulty:\s*([^\n]+)/);
-    
-    const module: LearningModule = {
-      title: title.trim(),
-      content: content,
-      moduleNumber: moduleNumber,
-      topic: topicMatch ? topicMatch[1].trim() : 'Financial Literacy',
-      difficulty: difficultyMatch ? difficultyMatch[1].trim() : 'Beginner'
-    };
-
-    this.currentModule.set(module);
-  }
-
-  private parseLessonStep(response: any, stepNumber: number): void {
-    const content = response.response || '';
-    
-    // Extract step title and total steps
-    const titleMatch = content.match(/Step \d+:\s*([^\n]+)/);
-    const stepsMatch = content.match(/Step \d+ of (\d+)/);
-    
-    const step: LearningStep = {
-      title: titleMatch ? titleMatch[1] : `Learning Step ${stepNumber}`,
-      content: content,
-      stepNumber: stepNumber,
-      totalSteps: stepsMatch ? parseInt(stepsMatch[1]) : 5
-    };
-
-    this.currentStep.set(step);
-  }
-
-  private parseQuizQuestions(response: any): void {
-    const content = response.response || '';
-    const questions: QuizQuestion[] = [];
-    
-    // Parse quiz questions from agent response
-    const lines = content.split('\n');
-    let currentQuestion: Partial<QuizQuestion> = {};
-    let options: string[] = [];
-    
-    for (const line of lines) {
-      const questionMatch = line.match(/Question \d+:\s*(.+)/);
-      const optionMatch = line.match(/([A-D])\.\s*(.+)/);
-      
-      if (questionMatch) {
-        if (currentQuestion.question && options.length > 0) {
-          questions.push({
-            question: currentQuestion.question,
-            options: options,
-            correct: 'B' // Default, should be parsed from response
-          });
-        }
-        currentQuestion = { question: questionMatch[1] };
-        options = [];
-      } else if (optionMatch && currentQuestion.question) {
-        options.push(optionMatch[2]);
-      }
-    }
-    
-    // Add the last question
-    if (currentQuestion.question && options.length > 0) {
-      questions.push({
-        question: currentQuestion.question,
-        options: options,
-        correct: 'B'
-      });
-    }
-    
-    // Fallback quiz if parsing fails
-    if (questions.length === 0) {
-      questions.push({
-        question: "What is the main benefit of diversifying your investments?",
-        options: [
-          "Higher guaranteed returns",
-          "Reduced overall risk",
-          "Lower fees",
-          "Faster growth"
-        ],
-        correct: 'B'
-      });
-    }
-
-    this.quizQuestions.set(questions);
-  }
-
-  private updateAgentActivity(agentName: string, activity: string, decision: string): void {
-    const activities = this.agentActivities();
-    const updatedActivities = activities.map(item => 
-      item.activity.includes(agentName) 
-        ? { activity: `${agentName}: ${activity}`, decision: `RESULT: ${decision}` }
-        : item
-    );
-    this.agentActivities.set(updatedActivities);
-  }
-
-  // Agent communication methods
-  private sendToProgressAgent(userId: string, message: string): Promise<any> {
-    return new Promise((resolve, reject) => {
-      this.agentService.sendToProgressAgent(userId, message).subscribe({
-        next: (response) => resolve(response),
-        error: (error) => reject(error)
-      });
-    });
-  }
-
-  private sendToContentAgent(userId: string, message: string): Promise<any> {
-    return new Promise((resolve, reject) => {
-      this.agentService.sendToContentAgent(userId, message).subscribe({
-        next: (response) => resolve(response),
-        error: (error) => reject(error)
-      });
-    });
-  }
-
-  // User interaction methods
+  // Quiz methods
   selectAnswer(index: number): void {
     this.selectedAnswerIndex.set(index);
     this.showQuizFeedback.set(true);
     
-    const quiz = this.currentQuiz();
+    const quiz = this.currentQuizQuestion();
     if (quiz) {
-      const selectedLetter = String.fromCharCode(65 + index); // Convert to A, B, C, D
-      if (selectedLetter === quiz.correct) {
-        this.quizCompleted.set(true);
-        this.updateAgentActivity('Assessment Agent', 'Monitoring engagement...', 'Correct answer - strong comprehension detected');
-      } else {
-        this.updateAgentActivity('Assessment Agent', 'Monitoring engagement...', 'Incorrect answer - may need additional support');
-      }
-    }
-  }
-
-  needHelp(): void {
-    this.isHelpPopupVisible.set(true);
-  }
-
-  closeHelp(): void {
-    this.isHelpPopupVisible.set(false);
-  }
-
-  async getHelp(type: string): Promise<void> {
-    this.closeHelp();
-    
-    const currentUserId = this.userId();
-    if (!currentUserId) return;
-
-    let helpMessage = '';
-    
-    try {
-      // Get contextual help from content agent
-      const response = await this.sendToContentAgent(
-        currentUserId,
-        `Provide ${type} help for current lesson. User needs assistance with comprehension.`
-      );
+      const selectedLetter = String.fromCharCode(65 + index);
+      const isCorrect = selectedLetter === quiz.correct;
+      this.quizCompleted.set(isCorrect);
       
-      helpMessage = response.response || this.getFallbackHelp(type);
-      
-    } catch (error) {
-      helpMessage = this.getFallbackHelp(type);
-    }
-    
-    alert(helpMessage);
-    this.updateAgentActivity('Content Agent', 'Providing contextual help...', `${type} assistance delivered`);
-  }
-
-  private getFallbackHelp(type: string): string {
-    switch (type) {
-      case 'analogy':
-        return "Think of investments like planting a garden - some plants grow quickly but might not survive harsh weather, while others grow slowly but are very sturdy!";
-      case 'examples':
-        return "For example, instead of buying just one company's stock, you could buy an ETF that owns pieces of hundreds of companies, spreading your risk.";
-      case 'simplify':
-        return "Key point: Don't put all your eggs in one basket. Spread your money across different investments to reduce risk.";
-      default:
-        return "Remember: investing is a long-term journey. Take your time to understand each concept before moving forward.";
-    }
-  }
-
-  async nextStep(): Promise<void> {
-    if (!this.quizCompleted()) {
-      alert('Please complete the understanding check first!');
-      return;
-    }
-
-    const currentUserId = this.userId();
-    if (!currentUserId) return;
-
-    try {
-      // Save progress to progress agent
-      const progressResponse = await this.sendToProgressAgent(
-        currentUserId,
-        `Save progress for user_id: ${currentUserId}, module: ${this.currentModuleNumber()}, step: ${this.currentStepNumber()}, score: 100. Use save_progress tool.`
+      // Update agent activity
+      this.updateAgentActivity(
+        isCorrect ? 'Assessment Agent: Strong comprehension detected' : 'Assessment Agent: Additional support may be needed',
+        isCorrect ? 'RESULT: Concept understood well' : 'RESULT: Review recommended'
       );
-
-      console.log('Progress Saved:', progressResponse);
-
-      // Move to next step or module
-      const step = this.currentStep();
-      if (step && this.currentStepNumber() < step.totalSteps) {
-        // Next step in current module
-        this.currentStepNumber.set(this.currentStepNumber() + 1);
-        await this.loadLessonStep(this.currentModuleNumber(), this.currentStepNumber());
-      } else {
-        // Next module
-        this.currentModuleNumber.set(this.currentModuleNumber() + 1);
-        this.currentStepNumber.set(1);
-        await this.loadModuleContent(this.currentModuleNumber());
-        await this.loadLessonStep(this.currentModuleNumber(), 1);
-      }
-
-      // Reset quiz state
-      this.quizCompleted.set(false);
-      this.selectedAnswerIndex.set(null);
-      this.showQuizFeedback.set(false);
-      this.currentQuizIndex.set(0);
-
-    } catch (error) {
-      console.error('Error progressing to next step:', error);
-      alert('Error saving progress. Please try again.');
-    }
-  }
-
-  previousStep(): void {
-    if (this.currentStepNumber() > 1) {
-      this.currentStepNumber.set(this.currentStepNumber() - 1);
-      this.loadLessonStep(this.currentModuleNumber(), this.currentStepNumber());
-    } else if (this.currentModuleNumber() > 1) {
-      this.currentModuleNumber.set(this.currentModuleNumber() - 1);
-      this.currentStepNumber.set(5); // Assume 5 steps per module
-      this.loadModuleContent(this.currentModuleNumber());
-      this.loadLessonStep(this.currentModuleNumber(), this.currentStepNumber());
     }
   }
 
   nextQuestion(): void {
     if (this.hasMoreQuestions()) {
-      this.currentQuizIndex.set(this.currentQuizIndex() + 1);
-      this.selectedAnswerIndex.set(null);
-      this.showQuizFeedback.set(false);
+      this.currentQuestionIndex.set(this.currentQuestionIndex() + 1);
+      this.resetQuizState();
     }
+  }
+
+  // Navigation methods
+  nextStep(): void {
+    if (!this.quizCompleted()) {
+      return;
+    }
+
+    const currentStep = this.currentStepNumber();
+    const totalSteps = this.currentStep().totalSteps;
+
+    if (currentStep < totalSteps) {
+      // Move to next step
+      this.currentStepNumber.set(currentStep + 1);
+      this.updateStepContent();
+    } else {
+      // Move to next module
+      this.currentModuleNumber.set(this.currentModuleNumber() + 1);
+      this.currentStepNumber.set(1);
+      this.updateModuleContent();
+    }
+
+    this.resetQuizState();
+    this.currentQuestionIndex.set(0);
+  }
+
+  previousStep(): void {
+    const currentStep = this.currentStepNumber();
+    
+    if (currentStep > 1) {
+      this.currentStepNumber.set(currentStep - 1);
+      this.updateStepContent();
+      this.resetQuizState();
+      this.currentQuestionIndex.set(0);
+    }
+  }
+
+  // Chat methods
+  sendChatMessage(): void {
+    const message = this.currentChatInput().trim();
+    if (!message) return;
+
+    // Add user message
+    this.addChatMessage(message, true);
+    this.currentChatInput.set('');
+
+    // Simulate agent response
+    setTimeout(() => {
+      const response = this.generateAgentResponse(message);
+      this.addChatMessage(response, false);
+    }, 1000);
+  }
+
+  sendQuickHelp(type: 'analogy' | 'examples' | 'simplify'): void {
+    const quickMessages = {
+      analogy: "Can you explain this with an analogy?",
+      examples: "Can you give me some examples?",
+      simplify: "Can you simplify this explanation?"
+    };
+
+    this.addChatMessage(quickMessages[type], true);
+
+    setTimeout(() => {
+      const response = this.generateQuickHelpResponse(type);
+      this.addChatMessage(response, false);
+    }, 1000);
+  }
+
+  // Helper methods
+  private addChatMessage(text: string, isUser: boolean): void {
+    const newMessage: ChatMessage = {
+      text,
+      isUser,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    
+    this.chatMessages.set([...this.chatMessages(), newMessage]);
+  }
+
+  private generateAgentResponse(userMessage: string): string {
+    const message = userMessage.toLowerCase();
+    
+    if (message.includes('invest') || message.includes('money')) {
+      return "Investing is about putting your money to work for you! Think of it like planting seeds - you invest time and money now to grow something bigger for the future.";
+    }
+    
+    if (message.includes('risk')) {
+      return "Risk in investing means the chance that you might lose some money, but it also comes with the potential for higher returns. It's like choosing between a safe path and a potentially rewarding adventure!";
+    }
+    
+    if (message.includes('etf')) {
+      return "An ETF is like a fruit basket - instead of buying just one apple (one stock), you get a whole basket with many different fruits (many different stocks). This spreads out your risk!";
+    }
+    
+    return "That's a great question! The key concept here is that small, consistent actions in investing can lead to significant long-term growth. What specific part would you like me to explain further?";
+  }
+
+  private generateQuickHelpResponse(type: 'analogy' | 'examples' | 'simplify'): string {
+    const currentStepTitle = this.currentStep().title;
+    
+    switch (type) {
+      case 'analogy':
+        return "Think of investing like planting a garden. You plant seeds (invest money), water them regularly (add more money over time), and eventually you harvest much more than you planted!";
+        
+      case 'examples':
+        return "For example: If you invest $100 per month for 30 years at 7% annual return, you'd have contributed $36,000 but your account would be worth over $100,000! That's the power of compound growth.";
+        
+      case 'simplify':
+        return "Simple version: Put money into investments → Money grows over time → You end up with more money than you started with. The key is starting early and being patient!";
+        
+      default:
+        return "I'm here to help you understand any part of this lesson. Feel free to ask specific questions!";
+    }
+  }
+
+  private updateStepContent(): void {
+    const stepNumber = this.currentStepNumber();
+    
+    const stepContent = {
+      1: {
+        title: 'Why Invest Your Money?',
+        content: `
+          <p>Investing helps your money grow over time through the power of compound interest.</p>
+          <p>Key benefits of investing:</p>
+          <ul>
+            <li><strong>Beat inflation:</strong> Keep your purchasing power</li>
+            <li><strong>Build wealth:</strong> Grow your money for future goals</li>
+            <li><strong>Financial freedom:</strong> Create passive income streams</li>
+          </ul>
+          <p>Even small amounts invested regularly can lead to significant wealth over time.</p>
+        `
+      },
+      2: {
+        title: 'Understanding Risk vs. Return',
+        content: `
+          <p>All investments carry some level of risk, but higher risk often means higher potential returns.</p>
+          <p>Investment risk levels:</p>
+          <ul>
+            <li><strong>Low Risk:</strong> Savings accounts, CDs (1-3% return)</li>
+            <li><strong>Medium Risk:</strong> Bonds, balanced funds (4-7% return)</li>
+            <li><strong>Higher Risk:</strong> Stocks, growth funds (7-10%+ return)</li>
+          </ul>
+          <p>Diversification helps manage risk by spreading investments across different asset types.</p>
+        `
+      },
+      3: {
+        title: 'Getting Started with ETFs',
+        content: `
+          <p>Exchange-Traded Funds (ETFs) are perfect for beginners because they offer instant diversification.</p>
+          <p>Why ETFs are great for new investors:</p>
+          <ul>
+            <li><strong>Low fees:</strong> Most charge less than 0.1% annually</li>
+            <li><strong>Diversification:</strong> Own hundreds of stocks in one fund</li>
+            <li><strong>Easy to buy:</strong> Trade like individual stocks</li>
+            <li><strong>Transparency:</strong> You know exactly what you own</li>
+          </ul>
+          <p>Popular beginner ETFs: VTI (Total Stock Market), VOO (S&P 500), VXUS (International)</p>
+        `
+      }
+    };
+
+    const stepData = stepContent[stepNumber as keyof typeof stepContent];
+    if (stepData) {
+      this.currentStep.set({
+        title: stepData.title,
+        content: stepData.content,
+        totalSteps: 5
+      });
+    }
+  }
+
+  private updateModuleContent(): void {
+    // This would load the next module - for now just update the title
+    this.currentModule.set({
+      title: 'Advanced Investment Strategies',
+      topic: 'Portfolio Management',
+      difficulty: 'Intermediate'
+    });
+  }
+
+  private resetQuizState(): void {
+    this.selectedAnswerIndex.set(null);
+    this.showQuizFeedback.set(false);
+    this.quizCompleted.set(false);
+  }
+
+  private updateAgentActivity(activity: string, decision: string): void {
+    const activities = this.agentActivities();
+    const newActivity = { activity, decision };
+    this.agentActivities.set([newActivity, ...activities.slice(0, 2)]);
   }
 }

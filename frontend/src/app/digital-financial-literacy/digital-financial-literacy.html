@@ -35,7 +35,7 @@
           <input id="buy-qty" type="number" [(ngModel)]="buyQuantity" min="1" placeholder="Quantity" />
           <button (click)="buyStock()" [disabled]="!buyQuantity || buyQuantity <= 0">Buy</button>
           <div class="trade-cost" *ngIf="buyQuantity">
-            Cost: ${{ ((buyQuantity ?? 0) * stock.price).toFixed(2) }}
+            Cost: ${{ (buyQuantity * stock.price).toFixed(2) }}
           </div>
         </div>
         <div class="trade-box">
@@ -43,7 +43,7 @@
           <input id="sell-qty" type="number" [(ngModel)]="sellQuantity" min="1" placeholder="Quantity" />
           <button (click)="sellStock()" [disabled]="!sellQuantity || sellQuantity <= 0">Sell</button>
           <div class="trade-cost" *ngIf="sellQuantity">
-            Value: ${{ ((sellQuantity ?? 0) * stock.price).toFixed(2) }}
+            Value: ${{ (sellQuantity * stock.price).toFixed(2) }}
           </div>
         </div>
       </div>
@@ -89,7 +89,7 @@
             <span class="quantity">{{ holding.quantity }} Shares</span>
           </div>
           <div class="holding-value">
-            <span class="value">${{ (holding.quantity * (mockQuotes[holding.symbol]?.price || 0)).toFixed(2) }}</span>
+            <span class="value">${{ (holding.quantity * (mockQuotes[holding.symbol].price || 0)).toFixed(2) }}</span>
             <span class="avg-price">Avg: ${{ holding.averagePrice.toFixed(2) }}</span>
           </div>
         </li>
