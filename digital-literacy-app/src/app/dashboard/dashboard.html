@@ -1,28 +1,96 @@
+<!-- src/app/dashboard/dashboard.html -->
 <div class="dashboard-header">
   <h2>Path-Finder AI</h2>
   <div class="tabs">
-    <button (click)="selectTab('agent')" [class.active]="activeTab === 'agent'">🚀 Agent Dashboard</button>
-    <button (click)="selectTab('learning')" [class.active]="activeTab === 'learning'">📚 Learning Center</button>
-    <button (click)="selectTab('finance')" [class.active]="activeTab === 'finance'">📈 Trading Sandbox</button>
-    <button (click)="selectTab('chat')" [class.active]="activeTab === 'chat'">💬 Chat with AI</button>
+    <button 
+      (click)="selectTab('agent')" 
+      [class.active]="activeTab() === 'agent'">
+      🚀 Agent Dashboard
+    </button>
+    <button 
+      (click)="selectTab('learning')" 
+      [class.active]="activeTab() === 'learning'">
+      📚 Learning Center
+    </button>
+    <button 
+      (click)="selectTab('finance')" 
+      [class.active]="activeTab() === 'finance'">
+      📈 Trading Sandbox
+    </button>
+    <button 
+      (click)="selectTab('chat')" 
+      [class.active]="activeTab() === 'chat'">
+      💬 Chat with AI
+    </button>
   </div>
   <button class="logout-btn" (click)="logout()">Logout</button>
 </div>
 
-<div [ngSwitch]="activeTab">
-  <app-agent-dashboard *ngSwitchCase="'agent'"></app-agent-dashboard>
-  <app-learning-page *ngSwitchCase="'learning'"></app-learning-page>
-  <app-digital-financial-literacy *ngSwitchCase="'finance'"></app-digital-financial-literacy>
-  
-  <div *ngSwitchCase="'chat'">
-    <div id="chat-container" class="chat-container">
-      <div *ngFor="let message of messages" [ngClass]="{'user-message': message.sender === 'user', 'ai-message': message.sender === 'ai'}">
-        {{ message.text }}
+<!-- Modern Angular 20+ Control Flow -->
+@switch (activeTab()) {
+  @case ('agent') {
+    <app-agent-dashboard></app-agent-dashboard>
+  }
+  @case ('learning') {
+    <app-learning-page></app-learning-page>
+  }
+  @case ('finance') {
+    <app-digital-financial-literacy></app-digital-financial-literacy>
+  }
+  @case ('chat') {
+    <div class="chat-wrapper">
+      <div id="chat-container" class="chat-container">
+        @for (message of messages(); track message.timestamp) {
+          <div class="message-wrapper" 
+               [class.user-message]="message.sender === 'user'"
+               [class.ai-message]="message.sender === 'ai'">
+            <div class="message-content">
+              <span class="message-text">{{ message.text }}</span>
+              @if (message.agentType) {
+                <span class="agent-tag">{{ message.agentType }}</span>
+              }
+              <span class="message-time">
+                {{ message.timestamp | date:'short' }}
+              </span>
+            </div>
+          </div>
+        }
+        
+        @if (isLoading()) {
+          <div class="ai-message loading-message">
+            <div class="typing-indicator">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+          </div>
+        }
       </div>
+      
+      <div class="chat-input">
+        <input 
+          type="text" 
+          [value]="userInput()"
+          (input)="updateUserInput($event.target.value)"
+          placeholder="Ask about financial literacy, assessments, or learning paths..." 
+          (keyup.enter)="sendMessage()"
+          [disabled]="isLoading()"/>
+        <button 
+          (click)="sendMessage()"
+          [disabled]="!canSendMessage()">
+          @if (isLoading()) {
+            Sending...
+          } @else {
+            Send
+          }
+        </button>
+      </div>
+      
+      @if (!userId()) {
+        <div class="auth-warning">
+          <p>⚠️ Please log in to start your financial literacy journey</p>
+        </div>
+      }
     </div>
-    <div class="chat-input">
-      <input type="text" [(ngModel)]="userInput" placeholder="Ask a question..." (keyup.enter)="sendMessage()"/>
-      <button (click)="sendMessage()">Send</button>
-    </div>
-  </div>
-</div>
+  }
+}
