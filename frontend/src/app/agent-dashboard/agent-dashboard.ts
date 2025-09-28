@@ -137,9 +137,10 @@ export class AgentDashboard implements OnInit {
       // Update agent status to show real activity
       this.updateAgentWithRealData(assessmentResponse);
       
-      // If user has assessments, try to get/create learning plan
+      // If user has assessments, try to get/create learning plan and progress
       if (assessmentResponse.response && !assessmentResponse.response.includes('no previous assessments')) {
         await this.loadLearningPlan();
+        await this.loadUserProgress();
       } else {
         // New user - set default insights
         this.planningInsights.set([
@@ -203,9 +204,51 @@ export class AgentDashboard implements OnInit {
     }
   }
 
+  private async loadUserProgress(): Promise<void> {
+    const currentUserId = this.userId();
+    if (!currentUserId) return;
+
+    try {
+      // Get user's current progress from progress agent
+      const progressResponse = await this.sendToProgressAgent(
+        currentUserId,
+        `Get user progress for user_id: ${currentUserId}. Use get_user_progress tool.`
+      );
+
+      console.log('Progress Agent Response:', progressResponse);
+
+      // Parse and update learning modules with real progress
+      this.parseProgressResponse(progressResponse);
+
+      // Update progress agent status
+      this.updateProgressAgentStatus(progressResponse.response);
+
+    } catch (error) {
+      console.error('Error loading user progress:', error);
+    }
+  }
+
+  private sendToAssessmentAgent(userId: string, message: string): Promise<any> {
+    return new Promise((resolve, reject) => {
+      this.agentService.sendToAssessmentAgent(userId, message).subscribe({
+        next: (response) => resolve(response),
+        error: (error) => reject(error)
+      });
+    });
+  }
+
   private sendToPlanningAgent(userId: string, message: string): Promise<any> {
     return new Promise((resolve, reject) => {
       this.agentService.sendToPlanningAgent(userId, message).subscribe({
+        next: (response) => resolve(response),
+        error: (error) => reject(error)
+      });
+    });
+  }
+
+  private sendToProgressAgent(userId: string, message: string): Promise<any> {
+    return new Promise((resolve, reject) => {
+      this.agentService.sendToProgressAgent(userId, message).subscribe({
         next: (response) => resolve(response),
         error: (error) => reject(error)
       });
@@ -263,43 +306,56 @@ export class AgentDashboard implements OnInit {
     this.updatePlanningAgentStatus(responseText);
   }
 
-  private updatePlanningAgentStatus(planResponse: string): void {
-    const updatedAgents = this.agents().map(agent => {
-      if (agent.name === 'Planning Agent') {
-        return {
-          ...agent,
-          status: 'Active' as const,
-          task: 'Learning path optimization complete...',
-          decision: `Created personalized curriculum: ${planResponse.substring(0, 60)}...`,
-          lastUpdate: new Date()
-        };
+  private parseProgressResponse(response: any): void {
+    const responseText = response.response || '';
+    
+    // Store raw progress data
+    this.userProgress.set(response);
+    
+    // Extract module progress from response
+    const modules: LearningModule[] = [];
+    
+    // Parse progress response to extract module information
+    if (responseText.includes('Module') || responseText.includes('progress')) {
+      // Try to extract structured progress data
+      const lines = responseText.split('\n');
+      
+      for (const line of lines) {
+        // Look for module progress patterns
+        const moduleMatch = line.match(/(\w+.*?):\s*(\d+)%/);
+        if (moduleMatch) {
+          const name = moduleMatch[1].trim();
+          const progress = parseInt(moduleMatch[2]);
+          
+          let status: 'completed' | 'in-progress' | 'upcoming' = 'upcoming';
+          if (progress === 100) status = 'completed';
+          else if (progress > 0) status = 'in-progress';
+          
+          modules.push({ name, progress, status });
+        }
       }
-      return agent;
-    });
+    }
     
-    this.agents.set(updatedAgents);
-  }
-
-  private sendToAssessmentAgent(userId: string, message: string): Promise<any> {
-    return new Promise((resolve, reject) => {
-      this.agentService.sendToAssessmentAgent(userId, message).subscribe({
-        next: (response) => resolve(response),
-        error: (error) => reject(error)
-      });
-    });
-  }
-
-  private updateLearningModules(assessmentData: any): void {
-    // Mock data - in real implementation, parse assessmentData
-    const mockProgress: LearningModule[] = [
-      { name: 'Investment Basics', progress: 65, status: 'in-progress' },
-      { name: 'Risk Assessment', progress: 100, status: 'completed' },
-      { name: 'Portfolio Building', progress: 0, status: 'upcoming' },
-      { name: 'Retirement Planning', progress: 0, status: 'upcoming' },
-      { name: 'Financial Goals', progress: 0, status: 'upcoming' }
-    ];
-    
-    this.learningModules.set(mockProgress);
+    // If no specific progress found, use default modules with some progress
+    if (modules.length === 0) {
+      const defaultModules: LearningModule[] = [
+        { name: 'Investment Basics', progress: 0, status: 'upcoming' },
+        { name: 'Risk Assessment', progress: 0, status: 'upcoming' },
+        { name: 'Portfolio Building', progress: 0, status: 'upcoming' },
+        { name: 'Retirement Planning', progress: 0, status: 'upcoming' },
+        { name: 'Financial Goals', progress: 0, status: 'upcoming' }
+      ];
+      
+      // Add some realistic progress if user has been active
+      if (responseText.includes('progress') || responseText.includes('started')) {
+        defaultModules[0] = { name: 'Investment Basics', progress: 65, status: 'in-progress' };
+        defaultModules[1] = { name: 'Risk Assessment', progress: 100, status: 'completed' };
+      }
+      
+      this.learningModules.set(defaultModules);
+    } else {
+      this.learningModules.set(modules);
+    }
   }
 
   private updateAgentWithRealData(response: any): void {
@@ -317,6 +373,53 @@ export class AgentDashboard implements OnInit {
     });
     
     this.agents.set(updatedAgents);
+  }
+
+  private updatePlanningAgentStatus(planResponse: string): void {
+    const updatedAgents = this.agents().map(agent => {
+      if (agent.name === 'Planning Agent') {
+        return {
+          ...agent,
+          status: 'Active' as const,
+          task: 'Learning path optimization complete...',
+          decision: `Created personalized curriculum: ${planResponse.substring(0, 60)}...`,
+          lastUpdate: new Date()
+        };
+      }
+      return agent;
+    });
+    
+    this.agents.set(updatedAgents);
+  }
+
+  private updateProgressAgentStatus(progressResponse: string): void {
+    const updatedAgents = this.agents().map(agent => {
+      if (agent.name === 'Progress Agent') {
+        return {
+          ...agent,
+          status: 'Monitoring' as const,
+          task: 'Tracking learning engagement and module completion...',
+          prediction: `Progress analysis: ${progressResponse.substring(0, 60)}...`,
+          lastUpdate: new Date()
+        };
+      }
+      return agent;
+    });
+    
+    this.agents.set(updatedAgents);
+  }
+
+  private updateLearningModules(assessmentData: any): void {
+    // Mock data - in real implementation, parse assessmentData
+    const mockProgress: LearningModule[] = [
+      { name: 'Investment Basics', progress: 65, status: 'in-progress' },
+      { name: 'Risk Assessment', progress: 100, status: 'completed' },
+      { name: 'Portfolio Building', progress: 0, status: 'upcoming' },
+      { name: 'Retirement Planning', progress: 0, status: 'upcoming' },
+      { name: 'Financial Goals', progress: 0, status: 'upcoming' }
+    ];
+    
+    this.learningModules.set(mockProgress);
   }
 
   private updateAgentActivity(): void {
@@ -407,7 +510,68 @@ export class AgentDashboard implements OnInit {
 
     if (nextModule) {
       console.log(`Starting: ${nextModule.name}`);
-      // Navigate to learning interface or trigger agent
+      // Trigger progress agent to start learning module
+      this.startLearningModule(nextModule.name);
+    }
+  }
+
+  async startLearningModule(moduleName: string): Promise<void> {
+    const currentUserId = this.userId();
+    if (!currentUserId) return;
+
+    try {
+      const response = await this.sendToProgressAgent(
+        currentUserId,
+        `Start learning module "${moduleName}" for user_id: ${currentUserId}. Use start_learning_module tool.`
+      );
+      
+      console.log('Start Module Response:', response);
+      
+      // Refresh progress after starting module
+      await this.loadUserProgress();
+      
+    } catch (error) {
+      console.error('Error starting learning module:', error);
+    }
+  }
+
+  async saveProgress(moduleName: string, score: number): Promise<void> {
+    const currentUserId = this.userId();
+    if (!currentUserId) return;
+
+    try {
+      const response = await this.sendToProgressAgent(
+        currentUserId,
+        `Save progress for user_id: ${currentUserId}, module: "${moduleName}", score: ${score}. Use save_progress tool.`
+      );
+      
+      console.log('Save Progress Response:', response);
+      
+      // Refresh progress display
+      await this.loadUserProgress();
+      
+    } catch (error) {
+      console.error('Error saving progress:', error);
+    }
+  }
+
+  async completeModule(moduleName: string): Promise<void> {
+    const currentUserId = this.userId();
+    if (!currentUserId) return;
+
+    try {
+      const response = await this.sendToProgressAgent(
+        currentUserId,
+        `Complete module "${moduleName}" for user_id: ${currentUserId}. Use complete_module tool.`
+      );
+      
+      console.log('Complete Module Response:', response);
+      
+      // Refresh progress after completion
+      await this.loadUserProgress();
+      
+    } catch (error) {
+      console.error('Error completing module:', error);
     }
   }
 

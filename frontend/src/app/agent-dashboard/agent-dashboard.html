@@ -133,6 +133,35 @@
             </div>
             <span class="progress-text">{{ module.progress }}%</span>
           </div>
+          
+          <!-- Progress Actions -->
+          @if (module.status === 'upcoming') {
+            <div class="module-actions">
+              <button 
+                class="btn-start" 
+                (click)="startLearningModule(module.name)"
+                [disabled]="isLoading()">
+                Start Module
+              </button>
+            </div>
+          }
+          
+          @if (module.status === 'in-progress') {
+            <div class="module-actions">
+              <button 
+                class="btn-continue" 
+                (click)="saveProgress(module.name, 75)"
+                [disabled]="isLoading()">
+                Save Progress
+              </button>
+              <button 
+                class="btn-complete" 
+                (click)="completeModule(module.name)"
+                [disabled]="isLoading()">
+                Complete
+              </button>
+            </div>
+          }
         </div>
       }
       

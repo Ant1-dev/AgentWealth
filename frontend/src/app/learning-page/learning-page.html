@@ -1,110 +1,168 @@
-<div class="container">
-  <div class="module-header">
-    <a href="#" class="back-btn">← Dashboard</a>
-    <h1 class="module-title">💰 ETF Fundamentals</h1>
-    <div class="agent-context">
-      <strong>🤖 Personalized by Path Planning Agent:</strong> Content adapted for visual learners with conservative risk tolerance.
-    </div>
-  </div>
-
-  <div class="progress-section">
-    <div class="progress-header">
-      <span class="step-info">Step 3 of 5: Understanding ETF Basics</span>
-      <span class="time-estimate">Estimated time: 8 minutes</span>
-    </div>
-    <div class="progress-bar">
-      <div class="progress-fill"></div>
-    </div>
-  </div>
-
-  <div class="main-content">
-    <div class="lesson-content">
-      <div class="agent-conversation">
-        <div class="agent-message">
-          <div class="agent-avatar">🤖</div>
-          <div class="message-bubble">
-            <div class="agent-name">Path Planning Agent</div>
-            <p>Great job on the risk assessment! I've noticed you learn best with visuals, so I've prepared some diagrams to explain ETFs. Think of an ETF like a fruit basket - instead of buying one fruit, you buy the whole basket and get a variety!</p>
-          </div>
+<!-- src/app/learning-page/learning-page.html -->
+<div class="learning-container">
+  <!-- Header Section -->
+  <div class="learning-header">
+    @if (currentModule()) {
+      <div class="module-info">
+        <h1>{{ currentModule()!.title }}</h1>
+        <div class="module-meta">
+          <span class="topic">{{ currentModule()!.topic }}</span>
+          <span class="difficulty">{{ currentModule()!.difficulty }}</span>
+          <span class="progress">{{ progressPercentage() }}% Complete</span>
         </div>
       </div>
+    } @else {
+      <div class="loading-header">
+        <h1>Loading Learning Content...</h1>
+        <p>Connecting to your personalized financial education agents</p>
+      </div>
+    }
+    
+    <div class="progress-bar-container">
+      <div class="progress-bar" [style.width.%]="progressPercentage()"></div>
+    </div>
+  </div>
 
-      <div class="lesson-section">
-        <div class="concept-explanation">
-          <h2 class="concept-title"><span>📊</span> What is an ETF?</h2>
-          <p>An <strong>Exchange-Traded Fund (ETF)</strong> is like a basket that holds many different stocks or bonds. Instead of buying individual companies one by one, you can buy one share of the ETF and own tiny pieces of them all!</p>
-          <div class="visual-example">
-            <div class="example-title">🍎 The Fruit Basket Analogy</div>
-            <div class="etf-comparison">
-              <div class="comparison-card">
-                <div class="card-icon">🍎</div>
-                <div class="card-title">Individual Stocks</div>
-                <div class="card-description">Like buying one apple. Risky if that one apple goes bad!</div>
+  <!-- Main Content Area -->
+  <div class="content-grid">
+    
+    <!-- Learning Content Panel -->
+    <div class="content-panel">
+      @if (isLoading()) {
+        <div class="loading-content">
+          <div class="spinner"></div>
+          <p>Loading personalized content from agents...</p>
+        </div>
+      } @else if (currentStep()) {
+        <div class="lesson-content">
+          <h2>{{ currentStep()!.title }}</h2>
+          <div class="content-text" [innerHTML]="currentStep()!.content"></div>
+          
+          <div class="lesson-navigation">
+            <button 
+              class="nav-btn prev" 
+              (click)="previousStep()"
+              [disabled]="currentStepNumber() === 1 && currentModuleNumber() === 1">
+              ← Previous Step
+            </button>
+            
+            <span class="step-indicator">
+              Step {{ currentStepNumber() }} of {{ currentStep()!.totalSteps }}
+            </span>
+            
+            <button 
+              class="nav-btn next" 
+              (click)="nextStep()"
+              [disabled]="!quizCompleted()">
+              Next Step →
+            </button>
+          </div>
+        </div>
+      } @else {
+        <div class="no-content">
+          <p>No learning content available. Please complete assessment and planning phases first.</p>
+        </div>
+      }
+
+      <!-- Help Section -->
+      <div class="help-section">
+        <button class="help-btn" (click)="needHelp()">
+          Need Help? 🤔
+        </button>
+      </div>
+    </div>
+
+    <!-- Quiz Panel -->
+    <div class="quiz-panel">
+      <h3>Understanding Check</h3>
+      
+      @if (currentQuiz()) {
+        <div class="quiz-content">
+          <div class="question">
+            <p>{{ currentQuiz()!.question }}</p>
+          </div>
+          
+          <div class="answers">
+            @for (option of currentQuiz()!.options; track $index) {
+              <div 
+                class="answer-option"
+                [class.selected]="selectedAnswerIndex() === $index"
+                [class.correct]="showQuizFeedback() && String.fromCharCode(65 + $index) === currentQuiz()!.correct"
+                [class.incorrect]="showQuizFeedback() && selectedAnswerIndex() === $index && String.fromCharCode(65 + $index) !== currentQuiz()!.correct"
+                (click)="selectAnswer($index)">
+                <span class="option-letter">{{ String.fromCharCode(65 + $index) }}.</span>
+                <span class="option-text">{{ option }}</span>
               </div>
-              <div class="comparison-card">
-                <div class="card-icon">🧺</div>
-                <div class="card-title">ETF</div>
-                <div class="card-description">Like buying a fruit basket. If one fruit is bad, you still have others!</div>
-              </div>
-            </div>
+            }
           </div>
-        </div>
 
-        <div class="interactive-element">
-          <div class="interactive-header">
-            <span>🧠</span>
-            <span class="interactive-title">Quick Understanding Check</span>
-          </div>
-          <div class="quiz-question"><strong>If you buy one share of a Total Stock Market ETF, what do you own?</strong></div>
-          <div class="quiz-options">
-            <div *ngFor="let answer of answers; let i = index"
-                 class="quiz-option"
-                 (click)="selectAnswer(i)"
-                 [class.correct]="selectedAnswerIndex === i && answer.correct"
-                 [class.incorrect]="selectedAnswerIndex === i && !answer.correct">
-              {{ answer.text }}
+          @if (showQuizFeedback()) {
+            <div class="quiz-feedback">
+              @if (quizCompleted()) {
+                <div class="feedback success">
+                  ✅ Correct! Great understanding of the concept.
+                </div>
+              } @else {
+                <div class="feedback error">
+                  ❌ Not quite right. Review the lesson content and try again.
+                </div>
+              }
             </div>
-          </div>
-          <div class="quiz-feedback" *ngIf="showQuizFeedback && selectedAnswerIndex !== null">
-            <div *ngIf="answers[selectedAnswerIndex].correct" class="feedback-correct"><strong>Correct!</strong> 🎉 You own tiny pieces of thousands of companies.</div>
-            <div *ngIf="!answers[selectedAnswerIndex].correct" class="feedback-incorrect"><strong>Not quite.</strong> An ETF contains many different investments, not just one.</div>
-          </div>
-        </div>
-      </div>
+          }
 
-      <div class="lesson-controls">
-        <button class="btn btn-secondary" (click)="needHelp()">🤔 Need Help?</button>
-        <button class="btn btn-primary" [disabled]="!quizCompleted" (click)="nextStep()">Continue → Expense Ratios</button>
-      </div>
+          @if (hasMoreQuestions()) {
+            <button 
+              class="next-question-btn" 
+              (click)="nextQuestion()"
+              [disabled]="!showQuizFeedback()">
+              Next Question →
+            </button>
+          }
+        </div>
+      } @else {
+        <div class="quiz-loading">
+          <p>Loading quiz questions...</p>
+        </div>
+      }
     </div>
 
-    <div class="sidebar">
-      <div class="agent-monitor">
-        <div class="monitor-header"><div class="live-indicator"></div><span class="monitor-title">Live Agent Monitoring</span></div>
-        <div *ngFor="let item of agentActivities" class="agent-activity-item">
-          <div class="agent-activity">{{ item.activity }}</div>
-          <div class="agent-decision">{{ item.decision }}</div>
-        </div>
-      </div>
-      <div class="understanding-tracker">
-        <h4>📊 Your Understanding</h4>
-        <div class="understanding-item"><span class="understanding-label">ETF Concept</span><span class="understanding-score">89%</span></div>
-        <div class="understanding-item"><span class="understanding-label">Diversification</span><span class="understanding-score">76%</span></div>
-        <div class="understanding-item"><span class="understanding-label">Risk vs Return</span><span class="understanding-score" style="color: #059669;">✓ High</span></div>
+    <!-- Agent Activity Panel -->
+    <div class="agent-panel">
+      <h3>AI Agent Activity</h3>
+      <div class="agent-activities">
+        @for (activity of agentActivities(); track $index) {
+          <div class="activity-item">
+            <div class="activity-text">{{ activity.activity }}</div>
+            <div class="activity-decision">{{ activity.decision }}</div>
+          </div>
+        }
       </div>
     </div>
   </div>
-</div>
 
-<div class="help-popup" *ngIf="isHelpPopupVisible">
-  <div class="help-content">
-    <span class="close-help" (click)="closeHelp()">&times;</span>
-    <h3>🤖 Agent Help Available</h3>
-    <p>I noticed you might need some clarification. What would be most helpful?</p>
-    <div class="help-options">
-      <button class="btn btn-primary" (click)="getHelp('analogy')">Use a different analogy</button>
-      <button class="btn btn-secondary" (click)="getHelp('examples')">Show me more examples</button>
-      <button class="btn btn-secondary" (click)="getHelp('simplify')">Simplify the explanation</button>
+  <!-- Help Popup -->
+  @if (isHelpPopupVisible()) {
+    <div class="help-overlay">
+      <div class="help-popup">
+        <div class="help-header">
+          <h3>How can we help?</h3>
+          <button class="close-btn" (click)="closeHelp()">×</button>
+        </div>
+        
+        <div class="help-options">
+          <button class="help-option" (click)="getHelp('analogy')">
+            🧩 Give me an analogy
+          </button>
+          
+          <button class="help-option" (click)="getHelp('examples')">
+            📝 Show me examples
+          </button>
+          
+          <button class="help-option" (click)="getHelp('simplify')">
+            💡 Simplify this concept
+          </button>
+        </div>
+      </div>
     </div>
-  </div>
+  }
 </div>
