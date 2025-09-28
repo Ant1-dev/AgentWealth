@@ -1,7 +1,5 @@
 from typing import Dict, Any, List
-from typing import Optional
 from shared.db_service import db
-import requests
 
 def get_content_from_delivery_agent(user_id: str, module_number: int, content_type: str, step_number: int) -> str:
     """Requests content from content delivery agent via A2A communication."""
@@ -435,7 +433,7 @@ Progress Summary:
             response += f"\n• Ready for final assessment"
             response += f"\n• Consider advanced topics or practical application"
         
-        response += f"\n\n✅ Module completion saved!"
+        response += f"\n\n"
         
         return response
         

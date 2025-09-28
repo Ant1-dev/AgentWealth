@@ -2,7 +2,6 @@ from typing import Dict, Any, List
 import json
 import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 from shared.db_service import db
 
 def get_module_content(user_id: str, module_number: int) -> str:

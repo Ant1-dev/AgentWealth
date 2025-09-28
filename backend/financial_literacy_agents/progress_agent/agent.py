@@ -8,7 +8,7 @@ from .tools.progress_tools import (
     complete_module,
     get_database_info,
     get_content_from_delivery_agent,
-    get_content_response
+    get_content_response, 
 )
 
 root_agent = Agent(
@@ -100,6 +100,6 @@ Remember: You're the learning companion that ensures users successfully complete
         complete_module,
         get_database_info,
         get_content_from_delivery_agent,
-        get_content_response
+        get_content_response,
     ]
 )
