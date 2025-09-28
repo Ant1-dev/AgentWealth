@@ -23,7 +23,7 @@ type TabType = 'chat' | 'agent' | 'learning' | 'finance';
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, AgentDashboard, DigitalFinancialLiteracy, LearningPage],
+  imports: [CommonModule, FormsModule, AgentDashboard, DigitalFinancialLiteracy, LearningPage, AccountDetails, Settings, PrivacyPolicy],
   templateUrl: './dashboard.html',
   styleUrls: ['./dashboard.css'],
 })
