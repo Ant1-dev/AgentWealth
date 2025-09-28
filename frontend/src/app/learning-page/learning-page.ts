@@ -66,7 +66,7 @@ export class LearningPage implements OnInit {
   showQuizFeedback = signal<boolean>(false);
   isLoading = signal<boolean>(false);
   userId = signal<string | undefined>(undefined);
-  assessmentIncomplete = signal<boolean>(false);
+  assessmentIncomplete = signal<boolean>(true); // Start as true
   
   // Chat State
   chatMessages = signal<ChatMessage[]>([]);
@@ -131,15 +131,16 @@ export class LearningPage implements OnInit {
   private async checkProgressHandoff(): Promise<boolean> {
     const currentUserId = this.userId();
     if (!currentUserId) return false;
-
+  
     try {
       const response = await this.sendToProgressAgent(
         currentUserId,
         `Check if a planning handoff exists for user_id: ${currentUserId}. Use the get_planning_handoff tool.`
       );
-      // More robust check for a successful handoff.
-      // We look for a positive confirmation, not just the absence of a negative one.
-      const handoffExists = response.status === 'success' && !response.response.toLowerCase().includes("no learning path handoff found");
+      
+      // **FIX:** More robust check for a successful handoff.
+      // We look for a positive confirmation ("Assessment Complete") instead of the absence of a negative one.
+      const handoffExists = response.status === 'success' && response.response.toLowerCase().includes("assessment complete");
       
       return handoffExists;
     } catch (error) {

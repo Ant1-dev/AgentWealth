@@ -191,7 +191,7 @@ def complete_assessment_and_handoff(user_id: str, summary: str) -> str:
     
     if len(assessments) < 3:
         return f"🔄 Need at least 3 topic assessments before creating your complete learning plan. You currently have {len(assessments)} assessments. Let's assess a few more areas!"
-    
+
     # Prepare handoff data
     handoff_data = {
         "user_id": user_id,
