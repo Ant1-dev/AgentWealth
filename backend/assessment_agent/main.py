@@ -14,21 +14,11 @@ def run_async(coro):
 
 @app.route("/run", methods=['POST'])
 def run_agent():
-    # --- Start of Debugging Logs ---
-    # Log the incoming request headers and raw data to diagnose the issue.
-    print("--- New Request ---")
-    print("Request Headers:", request.headers)
-    print("Request Raw Body:", request.data)
-    # --- End of Debugging Logs ---
     
     data = request.json
     
-    # --- Start of Debugging Logs ---
-    print("Parsed JSON Body:", data)
-    # --- End of Debugging Logs ---
 
-    # --- START OF FIX ---
-    # Changed the keys to match the incoming payload from the Angular frontend.
+
     user_id = data.get("userId")
     message_data = data.get("newMessage", {})
     message = message_data.get("text") if isinstance(message_data, dict) else None
@@ -36,13 +26,11 @@ def run_agent():
     if not user_id or not message:
         print("Validation failed: 'userId' or 'newMessage.text' key is missing or invalid in payload.")
         return jsonify({"error": "Invalid request payload"}), 400
-    # --- END OF FIX ---
+
     
     response_text = ""
     
     try:
-        # --- START OF SESSION MANAGEMENT ---
-        # 1. For simplicity, we'll use the user's ID as the session ID.
         session_id = user_id 
         
         # 2. Check if a session already exists in the database for this user.

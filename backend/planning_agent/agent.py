@@ -6,6 +6,7 @@ from .tools.planning_tools import (
     prepare_progress_handoff,
     get_database_info
 )
+from google.adk.runners import Runner
 
 root_agent = Agent(
     name="planning_agent",
@@ -86,4 +87,10 @@ Remember: You create the roadmap, the progress agent handles the actual learning
         prepare_progress_handoff,
         get_database_info
     ]
+)
+
+runner = Runner(
+    agent=root_agent,
+    app_name="planning_app",
+    session_service=session_service
 )

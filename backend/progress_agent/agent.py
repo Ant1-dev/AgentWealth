@@ -10,6 +10,7 @@ from .tools.progress_tools import (
     get_content_from_delivery_agent,
     get_content_response, 
 )
+from google.adk.runners import Runner
 
 root_agent = Agent(
     name="progress_agent",
@@ -102,4 +103,10 @@ Remember: You're the learning companion that ensures users successfully complete
         get_content_from_delivery_agent,
         get_content_response,
     ]
+)
+
+runner = Runner(
+    agent=root_agent,
+    app_name="progress_map",
+    session_service=session_service
 )

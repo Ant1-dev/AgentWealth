@@ -4,3 +4,4 @@ Flask-Cors
 uvicorn
 pydantic
 python-dotenv
+google-generativeai

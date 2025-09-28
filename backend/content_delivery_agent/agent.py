@@ -7,6 +7,7 @@ from .tools.content_tools import (
     process_content_requests,
     send_content_response
 )
+from google.adk.runners import Runner
 
 root_agent = Agent(
     name="content_delivery_agent",
@@ -98,4 +99,10 @@ Remember: You're the educational content expert that makes complex financial con
         process_content_requests,
         send_content_response
     ]
+)
+
+runner = Runner(
+    agent=root_agent,
+    app_name="content_delivery_app",
+    session_service=session_service
 )
