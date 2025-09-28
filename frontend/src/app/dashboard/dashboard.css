@@ -40,7 +40,68 @@
   background: rgba(255,255,255,0.3);
   box-shadow: 0 4px 15px rgba(0,0,0,0.2);
 }
+/* Group account + logout neatly on the right */
+.account-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-left: 1rem; /* adds spacing away from tabs */
+}
 
+.account-btn {
+  background: rgba(255,255,255,0.1);
+  border: none;
+  font-size: 1.3rem;
+  border-radius: 50%;
+  padding: 0.5rem;
+  cursor: pointer;
+  transition: background 0.3s ease;
+  color: white;
+}
+
+.account-btn:hover {
+  background: rgba(255,255,255,0.3);
+}
+/* Dropdown container */
+.dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+/* The hidden dropdown */
+.dropdown-content {
+  display: none;
+  position: absolute;
+  right: 0;
+  top: 120%;
+  background-color: #1e1e1e;
+  min-width: 180px;
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+  z-index: 1000;
+  flex-direction: column;
+  pointer-events: auto; /* allows clicks */
+
+}
+
+/* Each item */
+.dropdown-content a {
+  color: white;
+  padding: 0.75rem 1rem;
+  text-decoration: none;
+  display: block;
+  transition: background 0.2s ease;
+}
+
+.dropdown-content a:hover {
+  background-color: rgba(255,255,255,0.1);
+}
+
+/* Show dropdown when hovering over the button OR the dropdown itself */
+.dropdown:hover .dropdown-content,
+.dropdown-content:hover {
+  display: flex;
+}
 .logout-btn {
   padding: 0.75rem 1.5rem;
   border: 2px solid white;

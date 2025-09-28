@@ -22,8 +22,26 @@
       [class.active]="activeTab() === 'chat'">
       💬 Chat with AI
     </button>
+
+    <!-- New account/person icon button might remove later -->
+
+
   </div>
+<div class="account-controls">
+  <div class="dropdown">
+ <button class="account-btn" (click)="selectedDropdown.set(selectedDropdown() === 'account' ? null : 'account')">
+      👤
+    </button>
+    <!-- Dropdown menu -->
+    <div class="dropdown-content" *ngIf="selectedDropdown() === 'account'">
+      <a href="#" (click)="$event.preventDefault(); selectedDropdown.set('account')">Account Details</a>
+      <a href="#" (click)="$event.preventDefault(); selectedDropdown.set('settings')">Settings</a>
+      <a href="#" (click)="$event.preventDefault(); selectedDropdown.set('privacy')">Privacy Policy</a>
+    </div>
+  </div>
+
   <button class="logout-btn" (click)="logout()">Logout</button>
+</div>
 </div>
 
 <!-- Modern Angular 20+ Control Flow -->
@@ -94,3 +112,15 @@
     </div>
   }
 }
+
+<div class="dropdown-content" *ngIf="selectedDropdown() === 'account'">
+  <app-account-details></app-account-details>
+</div>
+
+<div class="dropdown-content" *ngIf="selectedDropdown() === 'settings'">
+  <app-settings></app-settings>
+</div>
+
+<div class="dropdown-content" *ngIf="selectedDropdown() === 'privacy'">
+  <app-privacy-policy></app-privacy-policy>
+</div>

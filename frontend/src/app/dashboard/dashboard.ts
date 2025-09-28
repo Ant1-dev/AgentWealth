@@ -8,7 +8,9 @@ import { DigitalFinancialLiteracy } from '../digital-financial-literacy/digital-
 import { LearningPage } from '../learning-page/learning-page';
 import { AgentService, AgentResponse } from '../agent.service';
 import { environment } from '../../environments/environment';
-
+import { AccountDetails } from '../account-details/account-details';
+import { Settings } from '../settings/settings';
+import { PrivacyPolicy } from '../privacy-policy/privacy-policy';
 interface Message {
   sender: 'user' | 'ai';
   text: string;
@@ -43,6 +45,7 @@ export class Dashboard implements OnInit {
   activeTab = signal<TabType>('chat');
   userId = signal<string | undefined>(undefined);
   isLoading = signal<boolean>(false);
+  selectedDropdown = signal<'account' | 'settings' | 'privacy'| null>(null);
 
   // Computed properties
   canSendMessage = computed(
@@ -205,6 +208,11 @@ private async loadUserData(): Promise<void> {
     });
   }
 
+
+
+closeDropdown() {
+  this.selectedDropdown.set(null);
+}
   // Helper method for template
   updateUserInput(value: string): void {
     this.userInput.set(value);
