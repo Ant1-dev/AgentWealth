@@ -14,11 +14,9 @@ from shared.db_service import db
 def get_module_content(user_id: str, module_number: int) -> str:
     """Retrieves and serves the complete learning content for a specific module."""
     try:
-        # Get user's learning path
         learning_path = db.get_user_learning_path(user_id)
-        
         if not learning_path:
-            return "No learning path found. Complete assessment and planning phases first."
+            return "ASSESSMENT_INCOMPLETE"
         
         modules = learning_path["path_data"].get("modules", [])
         
@@ -31,10 +29,8 @@ def get_module_content(user_id: str, module_number: int) -> str:
         learning_style = module.get("learning_style", "analytical")
         risk_tolerance = learning_path["path_data"].get("risk_tolerance", "moderate")
         
-        # Generate content based on topic and difficulty
         content = generate_content_for_topic(topic, difficulty, learning_style, risk_tolerance)
         
-        # Format the complete module content
         response = f"""📚 Module {module_number}: {module.get('title', 'Unknown')}
 
 {content}
@@ -50,6 +46,79 @@ Module Summary:
     except Exception as e:
         return f"Error retrieving module content: {str(e)}"
 
+def get_lesson_step(user_id: str, module_number: int, step_number: int) -> str:
+    """Retrieves a specific step within a learning module for progressive content delivery."""
+    try:
+        learning_path = db.get_user_learning_path(user_id)
+        if not learning_path:
+            return "ASSESSMENT_INCOMPLETE"
+        
+        modules = learning_path["path_data"].get("modules", [])
+        
+        if module_number < 1 or module_number > len(modules):
+            return f"Invalid module number. Available modules: 1-{len(modules)}"
+        
+        module = modules[module_number - 1]
+        topic = module.get("topic", "unknown")
+        difficulty = module.get("difficulty", "beginner")
+        
+        steps = generate_lesson_steps(topic, difficulty, step_number)
+        
+        if step_number < 1 or step_number > len(steps):
+            return f"Invalid step number. Available steps: 1-{len(steps)}"
+        
+        current_step = steps[step_number - 1]
+        
+        response = f"""📖 Module {module_number}, Step {step_number}: {current_step['title']}
+
+{current_step['content']}
+
+Progress: Step {step_number} of {len(steps)}
+Next: {steps[step_number]['title'] if step_number < len(steps) else 'Module completion assessment'}"""
+        
+        return response
+        
+    except Exception as e:
+        return f"Error retrieving lesson step: {str(e)}"
+
+def get_quiz_questions(user_id: str, module_number: int) -> str:
+    """Generates quiz questions for a learning module to assess comprehension."""
+    try:
+        learning_path = db.get_user_learning_path(user_id)
+        if not learning_path:
+            return "ASSESSMENT_INCOMPLETE"
+        
+        modules = learning_path["path_data"].get("modules", [])
+        
+        if module_number < 1 or module_number > len(modules):
+            return f"Invalid module number. Available modules: 1-{len(modules)}"
+        
+        module = modules[module_number - 1]
+        topic = module.get("topic", "unknown")
+        difficulty = module.get("difficulty", "beginner")
+        
+        questions = generate_quiz_for_topic(topic, difficulty)
+        
+        response = f"""📝 Module {module_number} Quiz: {module.get('title', 'Unknown')}
+
+Instructions: Select the best answer for each question.
+
+"""
+        
+        for i, question in enumerate(questions, 1):
+            response += f"Question {i}: {question['question']}\n"
+            for letter, option in zip(['A', 'B', 'C', 'D'], question['options']):
+                response += f"{letter}. {option}\n"
+            response += "\n"
+        
+        response += "Complete this quiz to test your understanding and earn your module completion score!"
+        
+        return response
+        
+    except Exception as e:
+        return f"Error generating quiz questions: {str(e)}"
+
+# --- The rest of the file (generate_content_for_topic, etc.) remains unchanged ---
 def generate_content_for_topic(topic: str, difficulty: str, learning_style: str, risk_tolerance: str) -> str:
     """Generates structured learning content for a specific financial topic.
 
@@ -265,53 +334,6 @@ Key Concepts:"""
     
     return content
 
-def get_lesson_step(user_id: str, module_number: int, step_number: int) -> str:
-    """Retrieves a specific step within a learning module for progressive content delivery.
-
-    Args:
-        user_id (str): The unique identifier for the user.
-        module_number (int): The module number (1-based indexing).
-        step_number (int): The step within the module (1-5 typically).
-
-    Returns:
-        str: Formatted content for the specific learning step.
-    """
-    try:
-        # Get user's learning path
-        learning_path = db.get_user_learning_path(user_id)
-        
-        if not learning_path:
-            return "No learning path found. Complete assessment and planning phases first."
-        
-        modules = learning_path["path_data"].get("modules", [])
-        
-        if module_number < 1 or module_number > len(modules):
-            return f"Invalid module number. Available modules: 1-{len(modules)}"
-        
-        module = modules[module_number - 1]
-        topic = module.get("topic", "unknown")
-        difficulty = module.get("difficulty", "beginner")
-        
-        # Break content into steps
-        steps = generate_lesson_steps(topic, difficulty, step_number)
-        
-        if step_number < 1 or step_number > len(steps):
-            return f"Invalid step number. Available steps: 1-{len(steps)}"
-        
-        current_step = steps[step_number - 1]
-        
-        response = f"""📖 Module {module_number}, Step {step_number}: {current_step['title']}
-
-{current_step['content']}
-
-Progress: Step {step_number} of {len(steps)}
-Next: {steps[step_number]['title'] if step_number < len(steps) else 'Module completion assessment'}"""
-        
-        return response
-        
-    except Exception as e:
-        return f"Error retrieving lesson step: {str(e)}"
-
 def generate_lesson_steps(topic: str, difficulty: str, step_number: int) -> List[Dict[str, str]]:
     """Generates a sequence of learning steps for progressive content delivery.
 
@@ -367,54 +389,6 @@ def generate_lesson_steps(topic: str, difficulty: str, step_number: int) -> List
         {"title": f"Step {i+1}", "content": f"Content for step {i+1} of {topic}"} for i in range(5)
     ])
 
-def get_quiz_questions(user_id: str, module_number: int) -> str:
-    """Generates quiz questions for a learning module to assess comprehension.
-
-    Args:
-        user_id (str): The unique identifier for the user.
-        module_number (int): The module number to generate quiz for.
-
-    Returns:
-        str: Formatted quiz questions with multiple choice options.
-    """
-    try:
-        # Get user's learning path
-        learning_path = db.get_user_learning_path(user_id)
-        
-        if not learning_path:
-            return "No learning path found. Complete assessment and planning phases first."
-        
-        modules = learning_path["path_data"].get("modules", [])
-        
-        if module_number < 1 or module_number > len(modules):
-            return f"Invalid module number. Available modules: 1-{len(modules)}"
-        
-        module = modules[module_number - 1]
-        topic = module.get("topic", "unknown")
-        difficulty = module.get("difficulty", "beginner")
-        
-        # Generate quiz questions
-        questions = generate_quiz_for_topic(topic, difficulty)
-        
-        response = f"""📝 Module {module_number} Quiz: {module.get('title', 'Unknown')}
-
-Instructions: Select the best answer for each question.
-
-"""
-        
-        for i, question in enumerate(questions, 1):
-            response += f"Question {i}: {question['question']}\n"
-            for letter, option in zip(['A', 'B', 'C', 'D'], question['options']):
-                response += f"{letter}. {option}\n"
-            response += "\n"
-        
-        response += "Complete this quiz to test your understanding and earn your module completion score!"
-        
-        return response
-        
-    except Exception as e:
-        return f"Error generating quiz questions: {str(e)}"
-
 def generate_quiz_for_topic(topic: str, difficulty: str) -> List[Dict[str, Any]]:
     """Generates quiz questions specific to a financial topic and difficulty level.
 
@@ -454,6 +428,20 @@ def generate_quiz_for_topic(topic: str, difficulty: str) -> List[Dict[str, Any]]
                 {
                     "question": "Dollar-cost averaging involves:",
                     "options": ["Buying all at once", "Investing the same amount regularly", "Only buying when prices are low", "Selling when prices are high"],
+                    "correct": "B"
+                }
+            ]
+        },
+        "risk_management": {
+            "beginner": [
+                {
+                    "question": "What is the primary way to manage investment risk?",
+                    "options": ["Buying only one stock", "Diversification", "Timing the market", "Using a savings account"],
+                    "correct": "B"
+                },
+                {
+                    "question": "What does 'risk tolerance' refer to?",
+                    "options": ["Your ability to predict the market", "Your comfort with the possibility of losing money", "The amount of money you have to invest", "The number of stocks you own"],
                     "correct": "B"
                 }
             ]

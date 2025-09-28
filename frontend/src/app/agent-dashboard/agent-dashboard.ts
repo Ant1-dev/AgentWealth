@@ -38,6 +38,9 @@ export class AgentDashboard implements OnInit {
   private auth = inject(AuthService);
   private agentService = inject(AgentService);
 
+  // Signal to prevent re-loading data on every refresh
+  private dataLoaded = signal<boolean>(false);
+
   // Signals for reactive state management
   agents = signal<AgentStatus[]>([
     {
@@ -120,6 +123,9 @@ export class AgentDashboard implements OnInit {
   }
 
   private async loadUserData(): Promise<void> {
+    // *** FIX: Check if data has already been loaded ***
+    if (this.dataLoaded()) return;
+
     const currentUserId = this.userId();
     if (!currentUserId) return;
 
@@ -157,6 +163,8 @@ export class AgentDashboard implements OnInit {
       console.error('Error loading user data:', error);
     } finally {
       this.isLoading.set(false);
+      // *** FIX: Set the flag to true after the first load ***
+      this.dataLoaded.set(true);
     }
   }
 

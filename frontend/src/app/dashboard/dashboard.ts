@@ -32,6 +32,9 @@ export class Dashboard implements OnInit {
   public auth = inject(AuthService);
   private agentService = inject(AgentService);
 
+  // **FIX: Add a signal to track if data has been loaded**
+  private dataLoaded = signal<boolean>(false);
+
   // Signals for reactive state management
   messages = signal<Message[]>([
     {
@@ -52,59 +55,60 @@ export class Dashboard implements OnInit {
     () => this.userInput().trim().length > 0 && this.userId() !== undefined && !this.isLoading()
   );
 
-ngOnInit(): void {
-  this.auth.user$.subscribe((user) => {
-    if (user?.sub) {
-      this.userId.set(user.sub);
-      console.log('User ID set:', user.sub);
+  ngOnInit(): void {
+    this.auth.user$.subscribe((user) => {
+      if (user?.sub) {
+        this.userId.set(user.sub);
+        console.log('User ID set:', user.sub);
 
-      // Automatically load user data when user ID is available
-      this.loadUserData();
-    }
-  });
-}
-
-// Similar to AgentDashboard
-private async loadUserData(): Promise<void> {
-  const currentUserId = this.userId();
-  if (!currentUserId) return;
-
-  this.isLoading.set(true);
-
-  try {
-    // Send the user ID directly as a message
-    const response = await this.sendToAssessmentAgent(
-      currentUserId,
-      `My user ID is: ${currentUserId}. Please get my assessment history.`
-    );
-
-    console.log('Initial Assessment Response:', response);
-
-    // Add AI response into chat history
-    const aiMessage: Message = {
-      sender: 'ai',
-      text: response.response,
-      timestamp: new Date(),
-      agentType: 'assessment'
-    };
-
-    this.messages.update((msgs) => [...msgs, aiMessage]);
-
-  } catch (error) {
-    console.error('Error loading user data:', error);
-
-    const errorMessage: Message = {
-      sender: 'ai',
-      text: 'Sorry, I couldn’t load your data. Please try again.',
-      timestamp: new Date(),
-      agentType: 'error'
-    };
-
-    this.messages.update((msgs) => [...msgs, errorMessage]);
-  } finally {
-    this.isLoading.set(false);
+        // **FIX: Only load data if it hasn't been loaded before**
+        if (!this.dataLoaded()) {
+          this.loadUserData();
+        }
+      }
+    });
   }
-}
+
+  private async loadUserData(): Promise<void> {
+    const currentUserId = this.userId();
+    if (!currentUserId) return;
+
+    this.isLoading.set(true);
+
+    try {
+      const response = await this.sendToAssessmentAgent(
+        currentUserId,
+        `My user ID is: ${currentUserId}. Please get my assessment history.`
+      );
+
+      console.log('Initial Assessment Response:', response);
+
+      const aiMessage: Message = {
+        sender: 'ai',
+        text: response.response,
+        timestamp: new Date(),
+        agentType: 'assessment'
+      };
+
+      this.messages.update((msgs) => [...msgs, aiMessage]);
+
+    } catch (error) {
+      console.error('Error loading user data:', error);
+
+      const errorMessage: Message = {
+        sender: 'ai',
+        text: 'Sorry, I couldn’t load your data. Please try again.',
+        timestamp: new Date(),
+        agentType: 'error'
+      };
+
+      this.messages.update((msgs) => [...msgs, errorMessage]);
+    } finally {
+      this.isLoading.set(false);
+      // **FIX: Set the flag to true after the first load**
+      this.dataLoaded.set(true);
+    }
+  }
 
 
   selectTab(tabName: TabType): void {

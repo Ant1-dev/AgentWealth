@@ -1,7 +1,22 @@
-// src/app/learning-page/learning-page.ts
-import { Component, signal, computed } from '@angular/core';
+import { Component, OnInit, inject, signal, computed, Pipe, PipeTransform } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { AuthService } from '@auth0/auth0-angular';
+import { AgentService } from '../agent.service';
 import { FormsModule } from '@angular/forms';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
+
+// Define the pipe directly in this file to avoid creating a new file
+@Pipe({
+  name: 'safeHtml',
+  standalone: true,
+})
+export class SafeHtmlPipe implements PipeTransform {
+  constructor(private sanitizer: DomSanitizer) {}
+
+  transform(value: string): SafeHtml {
+    return this.sanitizer.bypassSecurityTrustHtml(value);
+  }
+}
 
 interface QuizQuestion {
   question: string;
@@ -9,14 +24,10 @@ interface QuizQuestion {
   correct: string;
 }
 
-interface ChatMessage {
-  text: string;
-  isUser: boolean;
-  timestamp: string;
-}
-
 interface LearningModule {
   title: string;
+  content: string;
+  moduleNumber: number;
   topic: string;
   difficulty: string;
 }
@@ -24,353 +35,369 @@ interface LearningModule {
 interface LearningStep {
   title: string;
   content: string;
+  stepNumber: number;
   totalSteps: number;
+}
+
+interface ChatMessage {
+    text: string;
+    isUser: boolean;
+    timestamp: string;
 }
 
 @Component({
   selector: 'app-learning-page',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, SafeHtmlPipe],
   templateUrl: './learning-page.html',
   styleUrls: ['./learning-page.css']
 })
-export class LearningPage {
-  // Make String available to template
+export class LearningPage implements OnInit {
+  private auth = inject(AuthService);
+  private agentService = inject(AgentService);
+
+  // State Signals
+  currentModule = signal<LearningModule | null>(null);
+  currentStep = signal<LearningStep | null>(null);
+  quizQuestions = signal<QuizQuestion[]>([]);
+  currentQuizIndex = signal<number>(0);
+  selectedAnswerIndex = signal<number | null>(null);
+  quizCompleted = signal<boolean>(false);
+  showQuizFeedback = signal<boolean>(false);
+  isLoading = signal<boolean>(false);
+  userId = signal<string | undefined>(undefined);
+  assessmentIncomplete = signal<boolean>(false);
+  
+  // Chat State
+  chatMessages = signal<ChatMessage[]>([]);
+  currentChatInput = signal<string>('');
+  
+  // Agent Activity State
+  agentActivities = signal<Array<{activity: string, decision: string}>>([]);
+
+  // Progress State
+  currentModuleNumber = signal<number>(1);
+  currentStepNumber = signal<number>(1);
   readonly String = String;
 
-  // Learning content signals
-  currentModule = signal<LearningModule>({
-    title: 'Introduction to Smart Investing',
-    topic: 'Investment Basics',
-    difficulty: 'Beginner'
-  });
-
-  currentStep = signal<LearningStep>({
-    title: 'Why Invest Your Money?',
-    content: `
-      <p>Investing helps your money grow over time through the power of compound interest.</p>
-      <p>Key benefits of investing:</p>
-      <ul>
-        <li><strong>Beat inflation:</strong> Keep your purchasing power</li>
-        <li><strong>Build wealth:</strong> Grow your money for future goals</li>
-        <li><strong>Financial freedom:</strong> Create passive income streams</li>
-      </ul>
-      <p>Even small amounts invested regularly can lead to significant wealth over time.</p>
-    `,
-    totalSteps: 5
-  });
-
-  // Quiz data with multiple questions per step
-  allQuizQuestions = signal<QuizQuestion[][]>([
-    // Step 1 questions
-    [
-      {
-        question: "What is the main benefit of investing your money instead of keeping it in a regular savings account?",
-        options: [
-          "Your money is completely safe from any loss",
-          "You can beat inflation and potentially grow wealth over time",
-          "You get immediate access to large returns",
-          "Banks pay you bonus interest for investing"
-        ],
-        correct: "B"
-      },
-      {
-        question: "What does compound interest mean?",
-        options: [
-          "Interest paid only once per year",
-          "Interest calculated on the original amount only",
-          "Interest earned on both principal and previously earned interest",
-          "Interest that decreases over time"
-        ],
-        correct: "C"
-      }
-    ],
-    // Step 2 questions
-    [
-      {
-        question: "What is the relationship between risk and return in investing?",
-        options: [
-          "Higher risk always guarantees higher returns",
-          "Lower risk investments always lose money",
-          "Generally, higher risk investments offer potential for higher returns",
-          "Risk and return are completely unrelated"
-        ],
-        correct: "C"
-      }
-    ],
-    // Step 3 questions
-    [
-      {
-        question: "Why are ETFs recommended for beginning investors?",
-        options: [
-          "They guarantee profits with no risk",
-          "They offer instant diversification with low fees",
-          "They only invest in the safest companies",
-          "They automatically time the market for you"
-        ],
-        correct: "B"
-      }
-    ]
-  ]);
-
-  // Navigation signals
-  currentStepNumber = signal<number>(1);
-  currentModuleNumber = signal<number>(1);
-  currentQuestionIndex = signal<number>(0);
-
-  // Quiz state signals
-  selectedAnswerIndex = signal<number | null>(null);
-  showQuizFeedback = signal<boolean>(false);
-  quizCompleted = signal<boolean>(false);
-  isLoading = signal<boolean>(false);
-
-  // Chat signals
-  chatMessages = signal<ChatMessage[]>([
-    {
-      text: "Hi! I'm here to help you understand this lesson. Feel free to ask any questions!",
-      isUser: false,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    }
-  ]);
-  currentChatInput = signal<string>('');
-
-  // Agent activities
-  agentActivities = signal<Array<{activity: string, decision: string}>>([
-    { activity: 'Content Agent: Loading personalized learning materials...', decision: 'STATUS: Module content ready' },
-    { activity: 'Progress Agent: Tracking comprehension signals...', decision: 'STATUS: Monitoring quiz performance' },
-    { activity: 'Assessment Agent: Adapting difficulty...', decision: 'STATUS: Ready to provide contextual help' }
-  ]);
-
   // Computed properties
+  currentQuizQuestion = computed(() => this.quizQuestions()[this.currentQuizIndex()] || null);
+  hasMoreQuestions = computed(() => this.currentQuizIndex() < this.quizQuestions().length - 1);
   progressPercentage = computed(() => {
-    const current = this.currentStepNumber();
-    const total = this.currentStep().totalSteps;
-    return Math.round((current / total) * 100);
+    const step = this.currentStep();
+    return step ? Math.round((this.currentStepNumber() / step.totalSteps) * 100) : 0;
   });
 
-  currentQuizQuestion = computed(() => {
-    const stepIndex = this.currentStepNumber() - 1;
-    const questionIndex = this.currentQuestionIndex();
-    const questionsForStep = this.allQuizQuestions()[stepIndex];
-    
-    if (questionsForStep && questionIndex < questionsForStep.length) {
-      return questionsForStep[questionIndex];
-    }
-    return null;
-  });
-
-  hasMoreQuestions = computed(() => {
-    const stepIndex = this.currentStepNumber() - 1;
-    const questionIndex = this.currentQuestionIndex();
-    const questionsForStep = this.allQuizQuestions()[stepIndex];
-    
-    return questionsForStep && questionIndex < questionsForStep.length - 1;
-  });
-
-  // Quiz methods
-  selectAnswer(index: number): void {
-    this.selectedAnswerIndex.set(index);
-    this.showQuizFeedback.set(true);
-    
-    const quiz = this.currentQuizQuestion();
-    if (quiz) {
-      const selectedLetter = String.fromCharCode(65 + index);
-      const isCorrect = selectedLetter === quiz.correct;
-      this.quizCompleted.set(isCorrect);
-      
-      // Update agent activity
-      this.updateAgentActivity(
-        isCorrect ? 'Assessment Agent: Strong comprehension detected' : 'Assessment Agent: Additional support may be needed',
-        isCorrect ? 'RESULT: Concept understood well' : 'RESULT: Review recommended'
-      );
-    }
+  ngOnInit(): void {
+    this.auth.user$.subscribe(user => {
+      if (user?.sub) {
+        this.userId.set(user.sub);
+        this.loadLearningContent();
+      }
+    });
   }
 
-  nextQuestion(): void {
-    if (this.hasMoreQuestions()) {
-      this.currentQuestionIndex.set(this.currentQuestionIndex() + 1);
-      this.resetQuizState();
-    }
-  }
-
-  // Navigation methods
-  nextStep(): void {
-    if (!this.quizCompleted()) {
-      return;
-    }
-
-    const currentStep = this.currentStepNumber();
-    const totalSteps = this.currentStep().totalSteps;
-
-    if (currentStep < totalSteps) {
-      // Move to next step
-      this.currentStepNumber.set(currentStep + 1);
-      this.updateStepContent();
-    } else {
-      // Move to next module
-      this.currentModuleNumber.set(this.currentModuleNumber() + 1);
-      this.currentStepNumber.set(1);
-      this.updateModuleContent();
-    }
-
-    this.resetQuizState();
-    this.currentQuestionIndex.set(0);
-  }
-
-  previousStep(): void {
-    const currentStep = this.currentStepNumber();
-    
-    if (currentStep > 1) {
-      this.currentStepNumber.set(currentStep - 1);
-      this.updateStepContent();
-      this.resetQuizState();
-      this.currentQuestionIndex.set(0);
-    }
-  }
-
-  // Chat methods
-  sendChatMessage(): void {
-    const message = this.currentChatInput().trim();
-    if (!message) return;
-
-    // Add user message
-    this.addChatMessage(message, true);
-    this.currentChatInput.set('');
-
-    // Simulate agent response
-    setTimeout(() => {
-      const response = this.generateAgentResponse(message);
-      this.addChatMessage(response, false);
-    }, 1000);
-  }
-
-  sendQuickHelp(type: 'analogy' | 'examples' | 'simplify'): void {
-    const quickMessages = {
-      analogy: "Can you explain this with an analogy?",
-      examples: "Can you give me some examples?",
-      simplify: "Can you simplify this explanation?"
-    };
-
-    this.addChatMessage(quickMessages[type], true);
-
-    setTimeout(() => {
-      const response = this.generateQuickHelpResponse(type);
-      this.addChatMessage(response, false);
-    }, 1000);
-  }
-
-  // Helper methods
-  private addChatMessage(text: string, isUser: boolean): void {
-    const newMessage: ChatMessage = {
-      text,
-      isUser,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-    
-    this.chatMessages.set([...this.chatMessages(), newMessage]);
-  }
-
-  private generateAgentResponse(userMessage: string): string {
-    const message = userMessage.toLowerCase();
-    
-    if (message.includes('invest') || message.includes('money')) {
-      return "Investing is about putting your money to work for you! Think of it like planting seeds - you invest time and money now to grow something bigger for the future.";
-    }
-    
-    if (message.includes('risk')) {
-      return "Risk in investing means the chance that you might lose some money, but it also comes with the potential for higher returns. It's like choosing between a safe path and a potentially rewarding adventure!";
-    }
-    
-    if (message.includes('etf')) {
-      return "An ETF is like a fruit basket - instead of buying just one apple (one stock), you get a whole basket with many different fruits (many different stocks). This spreads out your risk!";
-    }
-    
-    return "That's a great question! The key concept here is that small, consistent actions in investing can lead to significant long-term growth. What specific part would you like me to explain further?";
-  }
-
-  private generateQuickHelpResponse(type: 'analogy' | 'examples' | 'simplify'): string {
-    const currentStepTitle = this.currentStep().title;
-    
-    switch (type) {
-      case 'analogy':
-        return "Think of investing like planting a garden. You plant seeds (invest money), water them regularly (add more money over time), and eventually you harvest much more than you planted!";
-        
-      case 'examples':
-        return "For example: If you invest $100 per month for 30 years at 7% annual return, you'd have contributed $36,000 but your account would be worth over $100,000! That's the power of compound growth.";
-        
-      case 'simplify':
-        return "Simple version: Put money into investments → Money grows over time → You end up with more money than you started with. The key is starting early and being patient!";
-        
-      default:
-        return "I'm here to help you understand any part of this lesson. Feel free to ask specific questions!";
-    }
-  }
-
-  async nextStep(): Promise<void> {
-    if (!this.quizCompleted()) {
-      alert('Please complete the understanding check first!');
-      return;
-    }
-
+  private async loadLearningContent(): Promise<void> {
     const currentUserId = this.userId();
     if (!currentUserId) return;
 
     this.isLoading.set(true);
+    this.agentActivities.set([]); 
+    this.updateAgentActivity('Progress Agent: Checking for handoff from Planning Agent...');
+
     try {
-      const progressPercentage = Math.round((this.currentStepNumber() / this.currentStep()!.totalSteps) * 100);
-      // Save progress to progress agent
-      const progressResponse = await this.sendToProgressAgent(
-        currentUserId,
-        `Save progress for user_id: ${currentUserId}, module: ${this.currentModuleNumber()}, step: ${progressPercentage}, score: 100. Use save_progress tool.`
-      );
+      const isAssessmentComplete = await this.checkProgressHandoff();
 
-      console.log('Progress Saved:', progressResponse);
-
-      // Move to next step or module
-      const step = this.currentStep();
-      if (step && this.currentStepNumber() < step.totalSteps) {
-        // Next step in current module
-        this.currentStepNumber.set(this.currentStepNumber() + 1);
-        await this.loadLessonStep(this.currentModuleNumber(), this.currentStepNumber());
-      } else {
-        // Next module
-        this.currentModuleNumber.set(this.currentModuleNumber() + 1);
-        this.currentStepNumber.set(1);
+      if (isAssessmentComplete) {
+        this.assessmentIncomplete.set(false);
+        this.updateAgentDecision('RESULT: Assessment complete. Proceeding to load content.');
+        
         await this.loadModuleContent(this.currentModuleNumber());
-        await this.loadLessonStep(this.currentModuleNumber(), 1);
+        await this.loadLessonStep(this.currentModuleNumber(), this.currentStepNumber());
+        await this.loadQuizQuestions(this.currentModuleNumber());
+      } else {
+        this.assessmentIncomplete.set(true);
+        this.updateAgentDecision('RESULT: Assessment incomplete. Please complete the initial assessment.');
       }
 
-      // Reset quiz state
-      this.quizCompleted.set(false);
-      this.selectedAnswerIndex.set(null);
-      this.showQuizFeedback.set(false);
-      this.currentQuizIndex.set(0);
-
     } catch (error) {
-      console.error('Error progressing to next step:', error);
-      alert('Error saving progress. Please try again.');
+      console.error('Error loading learning content:', error);
+      this.updateAgentDecision(`ERROR: ${error}`);
     } finally {
       this.isLoading.set(false);
     }
   }
 
-  previousStep(): void {
-    if (this.currentStepNumber() > 1) {
-      this.currentStepNumber.set(this.currentStepNumber() - 1);
-      this.loadLessonStep(this.currentModuleNumber(), this.currentStepNumber());
-    } else if (this.currentModuleNumber() > 1) {
-      this.currentModuleNumber.set(this.currentModuleNumber() - 1);
-      this.currentStepNumber.set(5); // Assume 5 steps per module
-      this.loadModuleContent(this.currentModuleNumber());
-      this.loadLessonStep(this.currentModuleNumber(), this.currentStepNumber());
+  private async checkProgressHandoff(): Promise<boolean> {
+    const currentUserId = this.userId();
+    if (!currentUserId) return false;
+
+    try {
+      const response = await this.sendToProgressAgent(
+        currentUserId,
+        `Check if a planning handoff exists for user_id: ${currentUserId}. Use the get_planning_handoff tool.`
+      );
+      return !response.response.includes("No learning path handoff found");
+    } catch (error) {
+      console.error('Error checking progress handoff:', error);
+      return false;
     }
+  }
+
+  private async loadModuleContent(moduleNumber: number): Promise<void> {
+    const currentUserId = this.userId();
+    if (!currentUserId) return;
+    this.updateAgentActivity(`Content Agent: Requesting Module ${moduleNumber}...`);
+    try {
+      const response = await this.sendToContentAgent(
+        currentUserId,
+        `Get module content for user_id: ${currentUserId}, module_number: ${moduleNumber}.`
+      );
+      this.parseModuleContent(response, moduleNumber);
+      this.updateAgentDecision('RESULT: Module content loaded.');
+    } catch (error) {
+      console.error(`Error loading module ${moduleNumber} content:`, error);
+      this.updateAgentDecision(`ERROR: ${error}`);
+    }
+  }
+
+  private async loadLessonStep(moduleNumber: number, stepNumber: number): Promise<void> {
+    const currentUserId = this.userId();
+    if (!currentUserId) return;
+    this.updateAgentActivity(`Content Agent: Requesting Step ${stepNumber} for Module ${moduleNumber}...`);
+    try {
+      const response = await this.sendToContentAgent(
+        currentUserId,
+        `Get lesson step for user_id: ${currentUserId}, module_number: ${moduleNumber}, step_number: ${stepNumber}.`
+      );
+      this.parseLessonStep(response, stepNumber);
+      this.updateAgentDecision('RESULT: Step content loaded.');
+    } catch (error) {
+      console.error(`Error loading lesson step ${stepNumber}:`, error);
+       this.updateAgentDecision(`ERROR: ${error}`);
+    }
+  }
+
+  private async loadQuizQuestions(moduleNumber: number): Promise<void> {
+    const currentUserId = this.userId();
+    if (!currentUserId) return;
+    this.updateAgentActivity(`Content Agent: Requesting Quiz for Module ${moduleNumber}...`);
+    try {
+      const response = await this.sendToContentAgent(
+        currentUserId,
+        `Get quiz questions for user_id: ${currentUserId}, module_number: ${moduleNumber}.`
+      );
+      this.parseQuizQuestions(response);
+       this.updateAgentDecision('RESULT: Quiz loaded.');
+    } catch (error) {
+      console.error(`Error loading quiz for module ${moduleNumber}:`, error);
+       this.updateAgentDecision(`ERROR: ${error}`);
+    }
+  }
+
+  // --- PARSING AND UTILITY FUNCTIONS ---
+  
+  private parseModuleContent(response: any, moduleNumber: number): void {
+    const content = response.response || '';
+    const titleMatch = content.match(/Module \d+:\s*([^\n]+)/);
+    const title = titleMatch ? titleMatch[1] : `Module ${moduleNumber}`;
+    const topicMatch = content.match(/Topic:\s*([^\n]+)/);
+    const difficultyMatch = content.match(/Difficulty:\s*([^\n]+)/);
+    
+    this.currentModule.set({
+      title: title.trim(),
+      content: content,
+      moduleNumber: moduleNumber,
+      topic: topicMatch ? topicMatch[1].trim() : 'Financial Literacy',
+      difficulty: difficultyMatch ? difficultyMatch[1].trim() : 'Beginner'
+    });
+  }
+
+  private parseLessonStep(response: any, stepNumber: number): void {
+    const content = response.response || '';
+    const titleMatch = content.match(/Step \d+:\s*([^\n]+)/);
+    const stepsMatch = content.match(/Step \d+ of (\d+)/);
+    
+    this.currentStep.set({
+      title: titleMatch ? titleMatch[1].trim() : `Learning Step ${stepNumber}`,
+      content: content,
+      stepNumber: stepNumber,
+      totalSteps: stepsMatch ? parseInt(stepsMatch[1]) : 5
+    });
+  }
+
+  private parseQuizQuestions(response: any): void {
+    const content = response.response || '';
+    const questions: QuizQuestion[] = [];
+    const qParts = content.split(/Question \d+:/).filter((p: string) => p.trim() !== '');
+
+    qParts.forEach((part: string) => {
+        const lines = part.trim().split('\n');
+        const questionText = lines[0].trim();
+        const options = lines.slice(1).map((l: string) => l.replace(/^[A-D]\.\s*/, '').trim()).filter((o: string) => o);
+        if (questionText && options.length >= 2) {
+             questions.push({ question: questionText, options, correct: 'B' }); // Placeholder
+        }
+    });
+    
+    if (questions.length === 0) {
+      questions.push({
+        question: "What is the primary benefit of a diversified investment portfolio?",
+        options: ["Guaranteed high returns", "Reduced overall risk", "Elimination of all fees", "Quick and easy access to cash"],
+        correct: 'B'
+      });
+    }
+    this.quizQuestions.set(questions);
+  }
+  
+  private updateAgentActivity(activity: string, decision: string = ''): void {
+    this.agentActivities.update(activities => [...activities, { activity, decision }]);
+  }
+  
+  private updateAgentDecision(decision: string): void {
+    this.agentActivities.update(activities => {
+      if (activities.length > 0) {
+        activities[activities.length - 1].decision = decision;
+      }
+      return [...activities];
+    });
+  }
+
+  private sendToProgressAgent(userId: string, message: string): Promise<any> {
+    return new Promise((resolve, reject) => {
+      this.agentService.sendToProgressAgent(userId, message).subscribe({
+        next: (response) => resolve(response),
+        error: (error) => reject(error)
+      });
+    });
+  }
+
+  private sendToContentAgent(userId: string, message: string): Promise<any> {
+    return new Promise((resolve, reject) => {
+      this.agentService.sendToContentAgent(userId, message).subscribe({
+        next: (response) => resolve(response),
+        error: (error) => reject(error)
+      });
+    });
+  }
+  
+  // --- USER INTERACTION METHODS ---
+
+  selectAnswer(index: number): void {
+    if (this.showQuizFeedback()) return;
+    this.selectedAnswerIndex.set(index);
+    this.showQuizFeedback.set(true);
+    
+    const quiz = this.currentQuizQuestion();
+    if (quiz && String.fromCharCode(65 + index) === quiz.correct) {
+      this.quizCompleted.set(true);
+      // FIX: Corrected this call to use the proper logging format
+      this.updateAgentActivity('Assessment Agent: User answered correctly.');
+      this.updateAgentDecision('STATUS: Strong comprehension detected.');
+    } else {
+      // FIX: Corrected this call to use the proper logging format
+      this.updateAgentActivity('Assessment Agent: User answered incorrectly.');
+      this.updateAgentDecision('STATUS: Comprehension gap detected.');
+    }
+  }
+
+  async sendChatMessage(): Promise<void> {
+    const messageText = this.currentChatInput().trim();
+    if (!messageText) return;
+
+    this.addChatMessage(messageText, true);
+    this.currentChatInput.set('');
+    await this.getHelpFromAgent(messageText);
+  }
+
+  async sendQuickHelp(type: string): Promise<void> {
+    const message = `Can you explain this using ${type === 'simplify' ? 'simpler terms' : `an ${type}` }?`;
+    this.addChatMessage(message, true);
+    await this.getHelpFromAgent(`Provide ${type} help for the current lesson.`);
+  }
+
+  private async getHelpFromAgent(prompt: string): Promise<void> {
+      const currentUserId = this.userId();
+      if (!currentUserId) return;
+
+      try {
+        const response = await this.sendToContentAgent(currentUserId, prompt);
+        const helpMessage = response.response || "Sorry, I couldn't get a helpful answer for that right now.";
+        this.addChatMessage(helpMessage, false);
+      } catch (error) {
+        this.addChatMessage("There was a problem connecting to the help agent. Please try again.", false);
+      }
+  }
+
+  private addChatMessage(text: string, isUser: boolean): void {
+    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    this.chatMessages.update(messages => [...messages, { text, isUser, timestamp }]);
+  }
+
+  async nextStep(): Promise<void> {
+    if (!this.quizCompleted()) {
+      this.addChatMessage("Please answer the question correctly to proceed.", false);
+      return;
+    }
+
+    const currentUserId = this.userId();
+    const step = this.currentStep();
+    if (!currentUserId || !step) return;
+
+    this.isLoading.set(true);
+    try {
+      const progressPercentage = Math.round((this.currentStepNumber() / step.totalSteps) * 100);
+      await this.sendToProgressAgent(
+        currentUserId,
+        `Save progress for user_id: ${currentUserId}, module: ${this.currentModuleNumber()}, step: ${progressPercentage}, score: 100.`
+      );
+
+      if (this.currentStepNumber() < step.totalSteps) {
+        this.currentStepNumber.set(this.currentStepNumber() + 1);
+        await this.loadLessonStep(this.currentModuleNumber(), this.currentStepNumber());
+      } else {
+        this.currentModuleNumber.set(this.currentModuleNumber() + 1);
+        this.currentStepNumber.set(1);
+        await this.loadLearningContent();
+      }
+      this.resetQuizState();
+    } catch (error) {
+      console.error('Error progressing to next step:', error);
+    } finally {
+      this.isLoading.set(false);
+    }
+  }
+
+  async previousStep(): Promise<void> {
+    this.isLoading.set(true);
+    try {
+        if (this.currentStepNumber() > 1) {
+            this.currentStepNumber.set(this.currentStepNumber() - 1);
+            await this.loadLessonStep(this.currentModuleNumber(), this.currentStepNumber());
+        } else if (this.currentModuleNumber() > 1) {
+            this.currentModuleNumber.set(this.currentModuleNumber() - 1);
+            this.currentStepNumber.set(5); // Assuming a fixed number of steps
+            await this.loadLearningContent();
+        }
+        this.resetQuizState();
+    } catch (error) {
+        console.error("Error going to previous step:", error);
+    } finally {
+        this.isLoading.set(false);
+    }
+  }
+  
+  private resetQuizState(): void {
+      this.quizCompleted.set(false);
+      this.selectedAnswerIndex.set(null);
+      this.showQuizFeedback.set(false);
+      this.currentQuizIndex.set(0);
   }
 
   nextQuestion(): void {
     if (this.hasMoreQuestions()) {
       this.currentQuizIndex.set(this.currentQuizIndex() + 1);
-      this.selectedAnswerIndex.set(null);
-      this.showQuizFeedback.set(false);
+      this.resetQuizState();
     }
   }
 }

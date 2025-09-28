@@ -1,8 +1,6 @@
-<!-- src/app/learning-page/learning-page.html -->
 <div class="learning-container">
-  <!-- Header Section -->
   <div class="learning-header">
-    @if (currentModule()) {
+    @if (currentModule() && !assessmentIncomplete()) {
     <div class="module-info">
       <h1>{{ currentModule()!.title }}</h1>
       <div class="module-meta">
@@ -13,43 +11,42 @@
     </div>
     } @else {
     <div class="loading-header">
-      <h1>Loading Learning Content...</h1>
-      <p>Connecting to your personalized financial education agents</p>
+      <h1>Your Learning Center</h1>
+      <p>Personalized lessons to guide your financial journey.</p>
     </div>
     }
-
     <div class="progress-bar-container">
       <div class="progress-bar" [style.width.%]="progressPercentage()"></div>
     </div>
   </div>
 
-  <!-- Main Content Area -->
   <div class="content-grid">
-    <!-- Learning Content Panel -->
     <div class="content-panel">
       @if (isLoading()) {
       <div class="loading-content">
         <div class="spinner"></div>
-        <p>Loading personalized content from agents...</p>
+        <p>Connecting to your learning agents...</p>
+      </div>
+      } @else if (assessmentIncomplete()) {
+      <div class="no-content assessment-incomplete">
+        <h2>Unlock Your Learning Path!</h2>
+        <p>Your personalized learning plan is waiting for you.</p>
+        <p>
+          Please return to the <strong>main chat dashboard</strong> to answer a few questions and generate your curriculum.
+        </p>
       </div>
       } @else if (currentStep()) {
       <div class="lesson-content">
         <h2>{{ currentStep()!.title }}</h2>
-        <div class="content-text" [innerHTML]="currentStep()!.content"></div>
+        <div class="content-text" [innerHTML]="currentStep()!.content | safeHtml"></div>
 
         <div class="lesson-navigation">
-          <button
-            class="nav-btn prev"
-            (click)="previousStep()"
-            [disabled]="currentStepNumber() === 1 && currentModuleNumber() === 1"
-          >
-            ← Previous Step
+          <button class="nav-btn prev" (click)="previousStep()" [disabled]="currentStepNumber() === 1 && currentModuleNumber() === 1">
+            ← Previous
           </button>
-
           <span class="step-indicator">
             Step {{ currentStepNumber() }} of {{ currentStep()!.totalSteps }}
           </span>
-
           <button class="nav-btn next" (click)="nextStep()" [disabled]="!quizCompleted()">
             Next Step →
           </button>
@@ -57,17 +54,16 @@
       </div>
       } @else {
       <div class="no-content">
-        <p>No learning content available. Please complete assessment and planning phases first.</p>
+        <p>No learning content is available at the moment. Please check back later.</p>
       </div>
       }
 
-      <!-- Mini Chat Help Section -->
+      @if (currentStep() && !assessmentIncomplete()) {
       <div class="mini-chat-section">
         <div class="chat-header">
           <span class="chat-title">💬 Ask for Help</span>
           <span class="agent-status">Agent Online</span>
         </div>
-
         <div class="chat-messages">
           @for (message of chatMessages(); track $index) {
           <div class="chat-message" [class.user]="message.isUser" [class.agent]="!message.isUser">
@@ -76,95 +72,67 @@
           </div>
           }
         </div>
-
         <div class="chat-input-container">
-          <input
-            type="text"
-            class="chat-input"
-            placeholder="Ask about this lesson..."
-            [ngModel]="currentChatInput()"
-            (ngModelChange)="currentChatInput.set($event)"
-            (keyup.enter)="sendChatMessage()"
-            #chatInput
-          />
-          <button class="send-btn" (click)="sendChatMessage()">
-            <span>→</span>
-          </button>
+          <input type="text" class="chat-input" placeholder="Ask about this lesson..." [(ngModel)]="currentChatInput" (keyup.enter)="sendChatMessage()" />
+          <button class="send-btn" (click)="sendChatMessage()"><span>→</span></button>
         </div>
-
         <div class="quick-help-options">
           <button class="quick-help-btn" (click)="sendQuickHelp('analogy')">🧩 Analogy</button>
           <button class="quick-help-btn" (click)="sendQuickHelp('examples')">📝 Examples</button>
           <button class="quick-help-btn" (click)="sendQuickHelp('simplify')">💡 Simplify</button>
         </div>
       </div>
-    </div>
-
-    <!-- Quiz Panel -->
-    <div class="quiz-panel">
-      <h3>Understanding Check</h3>
-
-      @if (currentQuizQuestion()) {
-      <div class="quiz-content">
-        <div class="question">
-          <p>{{ currentQuizQuestion()!.question }}</p>
-        </div>
-
-        <div class="answers">
-          @for (option of currentQuizQuestion()!.options; track $index) {
-          <div
-            class="answer-option"
-            [class.selected]="selectedAnswerIndex() === $index"
-            [class.correct]="
-              showQuizFeedback() &&
-              String.fromCharCode(65 + $index) === currentQuizQuestion()!.correct
-            "
-            [class.incorrect]="
-              showQuizFeedback() &&
-              selectedAnswerIndex() === $index &&
-              String.fromCharCode(65 + $index) !== currentQuizQuestion()!.correct
-            "
-            (click)="selectAnswer($index)"
-          >
-            <span class="option-letter">{{ String.fromCharCode(65 + $index) }}.</span>
-            <span class="option-text">{{ option }}</span>
-          </div>
-          }
-        </div>
-
-        @if (showQuizFeedback()) {
-        <div class="quiz-feedback">
-          @if (quizCompleted()) {
-          <div class="feedback success">✅ Correct! Great understanding of the concept.</div>
-          } @else {
-          <div class="feedback error">
-            ❌ Not quite right. Review the lesson content and try again.
-          </div>
-          }
-        </div>
-        } @if (hasMoreQuestions()) {
-        <button class="next-question-btn" (click)="nextQuestion()" [disabled]="!showQuizFeedback()">
-          Next Question →
-        </button>
-        }
-      </div>
-      } @else {
-      <div class="quiz-loading">
-        <p>Loading quiz questions...</p>
-      </div>
       }
     </div>
 
-    <!-- Agent Activity Panel -->
-    <div class="agent-panel">
-      <h3>AI Agent Activity</h3>
-      <div class="agent-activities">
-        @for (activity of agentActivities(); track $index) {
-        <div class="activity-item">
-          <div class="activity-text">{{ activity.activity }}</div>
-          <div class="activity-decision">{{ activity.decision }}</div>
+    <div class="side-panels">
+      @if (currentStep() && !assessmentIncomplete()) {
+      <div class="quiz-panel">
+        <h3>Understanding Check</h3>
+        @if (currentQuizQuestion()) {
+        <div class="quiz-content">
+          <div class="question"><p>{{ currentQuizQuestion()!.question }}</p></div>
+          <div class="answers">
+            @for (option of currentQuizQuestion()!.options; track $index) {
+            <div class="answer-option" 
+                 [class.selected]="selectedAnswerIndex() === $index"
+                 [class.correct]="showQuizFeedback() && String.fromCharCode(65 + $index) === currentQuizQuestion()!.correct"
+                 [class.incorrect]="showQuizFeedback() && selectedAnswerIndex() === $index && String.fromCharCode(65 + $index) !== currentQuizQuestion()!.correct"
+                 (click)="selectAnswer($index)">
+              <span class="option-letter">{{ String.fromCharCode(65 + $index) }}.</span>
+              <span class="option-text">{{ option }}</span>
+            </div>
+            }
+          </div>
+          @if (showQuizFeedback()) {
+          <div class="quiz-feedback">
+            @if (quizCompleted()) {
+            <div class="feedback success">✅ Correct! Great job.</div>
+            } @else {
+            <div class="feedback error">❌ Not quite. Review the content and try again.</div>
+            }
+          </div>
+          } @if (hasMoreQuestions() && quizCompleted()) {
+          <button class="next-question-btn" (click)="nextQuestion()">Next Question →</button>
+          }
         </div>
+        } @else {
+        <div class="quiz-loading"><p>Loading quiz...</p></div>
         }
+      </div>
+      }
+      <div class="agent-panel">
+        <h3>AI Agent Activity</h3>
+        <div class="agent-activities">
+          @for (activity of agentActivities(); track $index) {
+          <div class="activity-item">
+            <div class="activity-text">{{ activity.activity }}</div>
+            <div class="activity-decision">{{ activity.decision }}</div>
+          </div>
+          } @empty {
+            <div class="activity-item"><div class="activity-text">No agent activity to display.</div></div>
+          }
+        </div>
       </div>
     </div>
   </div>
