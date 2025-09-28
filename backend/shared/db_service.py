@@ -221,11 +221,29 @@ class DatabaseService:
             
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
+
+            # Check if a progress entry already exists for this user and module
             cursor.execute('''
-                INSERT OR REPLACE INTO learning_progress 
-                (user_id, module_id, step_number, score)
-                VALUES (?, ?, ?, ?)
-            ''', (user_id, module_id, step_number, score))
+                SELECT id FROM learning_progress
+                WHERE user_id = ? AND module_id = ?
+            ''', (user_id, module_id))
+            result = cursor.fetchone()
+
+            if result:
+                # Update existing progress
+                cursor.execute('''
+                    UPDATE learning_progress
+                    SET step_number = ?, score = ?, completed_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                ''', (step_number, score, result[0]))
+            else:
+                # Insert new progress entry
+                cursor.execute('''
+                    INSERT INTO learning_progress 
+                    (user_id, module_id, step_number, score)
+                    VALUES (?, ?, ?, ?)
+                ''', (user_id, module_id, step_number, score))
+                
             conn.commit()
             conn.close()
             return True

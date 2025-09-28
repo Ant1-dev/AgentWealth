@@ -306,80 +306,71 @@ export class LearningPage {
     }
   }
 
-  private updateStepContent(): void {
-    const stepNumber = this.currentStepNumber();
-    
-    const stepContent = {
-      1: {
-        title: 'Why Invest Your Money?',
-        content: `
-          <p>Investing helps your money grow over time through the power of compound interest.</p>
-          <p>Key benefits of investing:</p>
-          <ul>
-            <li><strong>Beat inflation:</strong> Keep your purchasing power</li>
-            <li><strong>Build wealth:</strong> Grow your money for future goals</li>
-            <li><strong>Financial freedom:</strong> Create passive income streams</li>
-          </ul>
-          <p>Even small amounts invested regularly can lead to significant wealth over time.</p>
-        `
-      },
-      2: {
-        title: 'Understanding Risk vs. Return',
-        content: `
-          <p>All investments carry some level of risk, but higher risk often means higher potential returns.</p>
-          <p>Investment risk levels:</p>
-          <ul>
-            <li><strong>Low Risk:</strong> Savings accounts, CDs (1-3% return)</li>
-            <li><strong>Medium Risk:</strong> Bonds, balanced funds (4-7% return)</li>
-            <li><strong>Higher Risk:</strong> Stocks, growth funds (7-10%+ return)</li>
-          </ul>
-          <p>Diversification helps manage risk by spreading investments across different asset types.</p>
-        `
-      },
-      3: {
-        title: 'Getting Started with ETFs',
-        content: `
-          <p>Exchange-Traded Funds (ETFs) are perfect for beginners because they offer instant diversification.</p>
-          <p>Why ETFs are great for new investors:</p>
-          <ul>
-            <li><strong>Low fees:</strong> Most charge less than 0.1% annually</li>
-            <li><strong>Diversification:</strong> Own hundreds of stocks in one fund</li>
-            <li><strong>Easy to buy:</strong> Trade like individual stocks</li>
-            <li><strong>Transparency:</strong> You know exactly what you own</li>
-          </ul>
-          <p>Popular beginner ETFs: VTI (Total Stock Market), VOO (S&P 500), VXUS (International)</p>
-        `
-      }
-    };
+  async nextStep(): Promise<void> {
+    if (!this.quizCompleted()) {
+      alert('Please complete the understanding check first!');
+      return;
+    }
 
-    const stepData = stepContent[stepNumber as keyof typeof stepContent];
-    if (stepData) {
-      this.currentStep.set({
-        title: stepData.title,
-        content: stepData.content,
-        totalSteps: 5
-      });
+    const currentUserId = this.userId();
+    if (!currentUserId) return;
+
+    this.isLoading.set(true);
+    try {
+      const progressPercentage = Math.round((this.currentStepNumber() / this.currentStep()!.totalSteps) * 100);
+      // Save progress to progress agent
+      const progressResponse = await this.sendToProgressAgent(
+        currentUserId,
+        `Save progress for user_id: ${currentUserId}, module: ${this.currentModuleNumber()}, step: ${progressPercentage}, score: 100. Use save_progress tool.`
+      );
+
+      console.log('Progress Saved:', progressResponse);
+
+      // Move to next step or module
+      const step = this.currentStep();
+      if (step && this.currentStepNumber() < step.totalSteps) {
+        // Next step in current module
+        this.currentStepNumber.set(this.currentStepNumber() + 1);
+        await this.loadLessonStep(this.currentModuleNumber(), this.currentStepNumber());
+      } else {
+        // Next module
+        this.currentModuleNumber.set(this.currentModuleNumber() + 1);
+        this.currentStepNumber.set(1);
+        await this.loadModuleContent(this.currentModuleNumber());
+        await this.loadLessonStep(this.currentModuleNumber(), 1);
+      }
+
+      // Reset quiz state
+      this.quizCompleted.set(false);
+      this.selectedAnswerIndex.set(null);
+      this.showQuizFeedback.set(false);
+      this.currentQuizIndex.set(0);
+
+    } catch (error) {
+      console.error('Error progressing to next step:', error);
+      alert('Error saving progress. Please try again.');
+    } finally {
+      this.isLoading.set(false);
     }
   }
 
-  private updateModuleContent(): void {
-    // This would load the next module - for now just update the title
-    this.currentModule.set({
-      title: 'Advanced Investment Strategies',
-      topic: 'Portfolio Management',
-      difficulty: 'Intermediate'
-    });
+  previousStep(): void {
+    if (this.currentStepNumber() > 1) {
+      this.currentStepNumber.set(this.currentStepNumber() - 1);
+      this.loadLessonStep(this.currentModuleNumber(), this.currentStepNumber());
+    } else if (this.currentModuleNumber() > 1) {
+      this.currentModuleNumber.set(this.currentModuleNumber() - 1);
+      this.currentStepNumber.set(5); // Assume 5 steps per module
+      this.loadModuleContent(this.currentModuleNumber());
+      this.loadLessonStep(this.currentModuleNumber(), this.currentStepNumber());
+    }
   }
 
-  private resetQuizState(): void {
-    this.selectedAnswerIndex.set(null);
-    this.showQuizFeedback.set(false);
-    this.quizCompleted.set(false);
-  }
-
-  private updateAgentActivity(activity: string, decision: string): void {
-    const activities = this.agentActivities();
-    const newActivity = { activity, decision };
-    this.agentActivities.set([newActivity, ...activities.slice(0, 2)]);
+  nextQuestion(): void {
+    if (this.hasMoreQuestions()) {
+      this.currentQuizIndex.set(this.currentQuizIndex() + 1);
+      this.selectedAnswerIndex.set(null);
+      this.showQuizFeedback.set(false);
+    }
   }
 }
