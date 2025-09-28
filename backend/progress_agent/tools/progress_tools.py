@@ -1,5 +1,14 @@
+import sys
+import os
 from typing import Dict, Any, List
+
+# Add the parent 'backend' directory to the Python path to find the 'shared' module
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_BACKEND_DIR = os.path.abspath(os.path.join(_SCRIPT_DIR, '..', '..'))
+sys.path.append(_BACKEND_DIR)
+
 from shared.db_service import db
+
 
 def get_content_from_delivery_agent(user_id: str, module_number: int, content_type: str, step_number: int) -> str:
     """Requests content from content delivery agent via A2A communication."""
@@ -38,6 +47,7 @@ def get_content_from_delivery_agent(user_id: str, module_number: int, content_ty
             
     except Exception as e:
         return f"Error: {str(e)}"
+
     
 def get_content_response(user_id: str) -> str:
     """Retrieves content response from content delivery agent."""

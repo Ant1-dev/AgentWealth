@@ -1,19 +1,18 @@
-from typing import Dict, Any, List
-import json
 import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
+from typing import Dict, Any, List
+import json
+
+# Add the parent 'backend' directory to the Python path to find the 'shared' module
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_BACKEND_DIR = os.path.abspath(os.path.join(_SCRIPT_DIR, '..', '..'))
+sys.path.append(_BACKEND_DIR)
+
 from shared.db_service import db
 
+
 def get_assessment_handoff(user_id: str) -> str:
-    """Retrieves the latest assessment handoff data for a user from the assessment agent.
-
-    Args:
-        user_id (str): The unique identifier for the user whose assessment data to retrieve.
-
-    Returns:
-        str: Formatted assessment summary or error message if no handoff found.
-    """
+    """Retrieves the latest assessment handoff data for a user from the assessment agent."""
     try:
         handoff = db.get_latest_handoff(user_id, "planning_agent")
         
@@ -28,6 +27,7 @@ User Profile:
 • Total assessments: {message_data.get('total_topics_assessed', 0)}
 • Risk tolerance: {message_data.get('user_profile', {}).get('primary_risk_tolerance', 'unknown')}
 • Learning style: {message_data.get('user_profile', {}).get('primary_learning_style', 'unknown')}
+
 
 Knowledge Areas:"""
         

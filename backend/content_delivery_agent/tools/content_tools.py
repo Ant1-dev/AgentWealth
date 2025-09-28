@@ -1,19 +1,18 @@
-from typing import Dict, Any, List
-import json
 import sys
 import os
+from typing import Dict, Any, List
+import json
+
+# Add the parent 'backend' directory to the Python path to find the 'shared' module
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_BACKEND_DIR = os.path.abspath(os.path.join(_SCRIPT_DIR, '..', '..'))
+sys.path.append(_BACKEND_DIR)
+
 from shared.db_service import db
 
+
 def get_module_content(user_id: str, module_number: int) -> str:
-    """Retrieves and serves the complete learning content for a specific module.
-
-    Args:
-        user_id (str): The unique identifier for the user requesting content.
-        module_number (int): The module number to retrieve content for (1-based indexing).
-
-    Returns:
-        str: Formatted module content with lessons, examples, and activities.
-    """
+    """Retrieves and serves the complete learning content for a specific module."""
     try:
         # Get user's learning path
         learning_path = db.get_user_learning_path(user_id)
