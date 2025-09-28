@@ -61,40 +61,47 @@
   <div class="column">
     <div class="card">
       <div class="card-header">
-        <h4>AI Insights & Predictions</h4>
+        <h4>AI Planning & Learning Path</h4>
       </div>
       
-      <div class="prediction-item">
-        <div class="prediction-icon">🎯</div>
-        <div class="prediction-content">
-          <p><strong>Next Challenge:</strong> Portfolio diversification concepts predicted as next learning focus</p>
-          <span class="confidence">Confidence: 87%</span>
+      @if (planningInsights().length > 0) {
+        @for (insight of planningInsights(); track $index) {
+          <div class="prediction-item">
+            <div class="prediction-icon">
+              @switch ($index) {
+                @case (0) { 🎯 }
+                @case (1) { 🧠 }
+                @case (2) { 📚 }
+                @case (3) { ⏰ }
+                @default { 💡 }
+              }
+            </div>
+            <div class="prediction-content">
+              <p><strong>{{ insight }}</strong></p>
+              <span class="confidence">AI Optimized</span>
+            </div>
+          </div>
+        }
+      } @else {
+        <div class="prediction-item">
+          <div class="prediction-icon">⏳</div>
+          <div class="prediction-content">
+            <p><strong>Loading your personalized learning plan...</strong></p>
+            <span class="confidence">Analyzing assessments</span>
+          </div>
         </div>
-      </div>
+      }
       
-      <div class="prediction-item">
-        <div class="prediction-icon">⏰</div>
-        <div class="prediction-content">
-          <p><strong>Optimal Learning:</strong> Peak engagement detected between 2-4pm based on your patterns</p>
-          <span class="confidence">Confidence: 94%</span>
+      @if (learningPlan()) {
+        <div class="plan-details">
+          <button 
+            class="btn-secondary" 
+            (click)="viewFullPlan()"
+            style="margin-top: 16px; width: 100%;">
+            View Complete Learning Plan
+          </button>
         </div>
-      </div>
-      
-      <div class="prediction-item">
-        <div class="prediction-icon">📈</div>
-        <div class="prediction-content">
-          <p><strong>Goal Achievement:</strong> Investment confidence milestone achievable within 2 weeks</p>
-          <span class="confidence">Confidence: 82%</span>
-        </div>
-      </div>
-
-      <div class="prediction-item">
-        <div class="prediction-icon">🧠</div>
-        <div class="prediction-content">
-          <p><strong>Learning Style:</strong> Visual learning approach showing 3x better retention rates</p>
-          <span class="confidence">Confidence: 91%</span>
-        </div>
-      </div>
+      }
     </div>
 
     <div class="card">
