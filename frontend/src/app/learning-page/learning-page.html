@@ -29,11 +29,31 @@
       </div>
       } @else if (assessmentIncomplete()) {
       <div class="no-content assessment-incomplete">
-        <h2>Unlock Your Learning Path!</h2>
-        <p>Your personalized learning plan is waiting for you.</p>
-        <p>
-          Please return to the <strong>main chat dashboard</strong> to answer a few questions and generate your curriculum.
-        </p>
+        <h2>🚀 Ready to Unlock Your Learning Path?</h2>
+        <p>Your personalized learning plan is being prepared based on your assessment.</p>
+        
+        <div class="assessment-status">
+          <h3>Current Status:</h3>
+          <ul>
+            <li>✅ Complete at least 3 topic assessments in the chat</li>
+            <li>✅ Generate your learning plan via the planning agent</li>
+            <li>🔄 Return here to access your content</li>
+          </ul>
+        </div>
+        
+        <div class="action-buttons">
+          <button class="refresh-btn" (click)="refreshLearningContent()">
+            🔄 Check for Learning Plan
+          </button>
+          <a href="#" class="chat-link" (click)="$event.preventDefault(); selectTab('chat')">
+            💬 Go to Assessment Chat
+          </a>
+        </div>
+        
+        <div class="help-text">
+          <p><strong>Need help?</strong> Go to the Chat tab and tell the AI agent:</p>
+          <blockquote>"I want to start my financial literacy assessment" or "Create my learning plan"</blockquote>
+        </div>
       </div>
       } @else if (currentStep()) {
       <div class="lesson-content">
@@ -47,7 +67,7 @@
           <span class="step-indicator">
             Step {{ currentStepNumber() }} of {{ currentStep()!.totalSteps }}
           </span>
-          <button class="nav-btn next" (click)="nextStep()" [disabled]="!quizCompleted()">
+          <button class="nav-btn next" (click)="nextStep()" [disabled]="!canProceedToNextStep()">
             Next Step →
           </button>
         </div>
@@ -55,6 +75,9 @@
       } @else {
       <div class="no-content">
         <p>No learning content is available at the moment. Please check back later.</p>
+        <button class="refresh-btn" (click)="refreshLearningContent()">
+          🔄 Refresh Content
+        </button>
       </div>
       }
 
