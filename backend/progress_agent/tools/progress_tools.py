@@ -1,6 +1,7 @@
 import sys
 import os
 from typing import Dict, Any, List
+import json
 
 # Add the parent 'backend' directory to the Python path to find the 'shared' module
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -9,66 +10,456 @@ sys.path.append(_BACKEND_DIR)
 
 from shared.db_service import db
 
-
-def get_content_from_delivery_agent(user_id: str, module_number: int, content_type: str, step_number: int) -> str:
-    """Requests content from content delivery agent via A2A communication."""
+def get_learning_modules(user_id: str) -> str:
+    """Returns structured learning modules data with progress and status."""
     try:
-        # Map content types
-        if content_type in ["reading", "full_module", "content"]:
-            request_type = "get_module_content"
-        elif content_type == "lesson_step":
-            request_type = "get_lesson_step"
-        elif content_type == "quiz":
-            request_type = "get_quiz_questions"
-        else:
-            return f"Invalid content_type: {content_type}"
+        # Get user's learning path
+        learning_path = db.get_user_learning_path(user_id)
+        if not learning_path:
+            return json.dumps({
+                "status": "error",
+                "message": "No learning path found. Complete assessment first.",
+                "data": None
+            })
         
-        # Prepare A2A request
-        request_data = {
-            "request_type": request_type,
-            "user_id": user_id,
-            "module_number": module_number,
-            "step_number": step_number,
-            "requesting_agent": "progress_agent"
+        # Get user's progress data
+        progress_data = db.get_user_progress(user_id)
+        
+        # Create progress lookup
+        progress_lookup = {}
+        if progress_data:
+            for module_id, step_number, score, completed_at in progress_data:
+                module_num = int(module_id.replace("module_", ""))
+                progress_lookup[module_num] = {
+                    "step": step_number,
+                    "score": score,
+                    "completed_at": completed_at
+                }
+        
+        # Build modules array
+        modules = []
+        path_modules = learning_path["path_data"].get("modules", [])
+        
+        for i, module_data in enumerate(path_modules, 1):
+            progress_info = progress_lookup.get(i, {"step": 0, "score": 0})
+            
+            # Determine status and progress
+            if progress_info["step"] >= 100:
+                status = "completed"
+                progress = 100
+            elif progress_info["step"] > 0:
+                status = "in-progress"
+                progress = progress_info["step"]
+            else:
+                status = "upcoming"
+                progress = 0
+            
+            module = {
+                "name": module_data.get("title", f"Module {i}"),
+                "progress": progress,
+                "status": status,
+                "topic": module_data.get("topic", "financial_literacy"),
+                "difficulty": module_data.get("difficulty", "beginner"),
+                "duration": module_data.get("duration", "2-3 hours"),
+                "module_number": i,
+                "last_score": progress_info["score"],
+                "last_accessed": progress_info.get("completed_at", ""),
+                "description": f"Learn essential {module_data.get('topic', 'financial').replace('_', ' ')} concepts"
+            }
+            modules.append(module)
+        
+        # Calculate overall statistics
+        completed_count = sum(1 for m in modules if m["status"] == "completed")
+        in_progress_count = sum(1 for m in modules if m["status"] == "in-progress")
+        total_modules = len(modules)
+        overall_progress = round((completed_count / total_modules * 100)) if total_modules > 0 else 0
+        
+        response_data = {
+            "status": "success",
+            "data": {
+                "modules": modules,
+                "total_modules": total_modules,
+                "completed_count": completed_count,
+                "in_progress_count": in_progress_count,
+                "upcoming_count": total_modules - completed_count - in_progress_count,
+                "overall_progress": overall_progress,
+                "user_id": user_id,
+                "learning_style": learning_path["path_data"].get("learning_style", "analytical"),
+                "risk_tolerance": learning_path["path_data"].get("risk_tolerance", "moderate")
+            }
         }
         
-        # Save A2A communication request
-        success = db.save_agent_communication(
-            user_id=user_id,
-            from_agent="progress_agent",
-            to_agent="content_delivery_agent",
-            message_data=request_data
-        )
+        return json.dumps(response_data)
+        
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Error retrieving learning modules: {str(e)}",
+            "data": None
+        })
+
+def get_dashboard_stats(user_id: str) -> str:
+    """Returns comprehensive dashboard statistics as JSON."""
+    try:
+        # Get learning modules data first
+        modules_response = get_learning_modules(user_id)
+        modules_data = json.loads(modules_response)
+        
+        if modules_data["status"] != "success":
+            return json.dumps({
+                "status": "error",
+                "message": "Cannot generate stats without learning modules",
+                "data": None
+            })
+        
+        module_stats = modules_data["data"]
+        
+        # Get additional stats
+        progress_data = db.get_user_progress(user_id)
+        learning_path = db.get_user_learning_path(user_id)
+        
+        # Calculate learning streak
+        learning_streak = 0
+        if progress_data:
+            # Simple streak calculation based on recent activity
+            recent_entries = sorted(progress_data, key=lambda x: x[3], reverse=True)[:7]
+            learning_streak = len(recent_entries)
+        
+        # Calculate time spent (estimated)
+        estimated_time_spent = 0
+        for module in module_stats["modules"]:
+            if module["status"] == "completed":
+                estimated_time_spent += 2.5  # Average 2.5 hours per completed module
+            elif module["status"] == "in-progress":
+                estimated_time_spent += (module["progress"] / 100) * 2.5
+        
+        # Get next module recommendation
+        next_module = None
+        for module in module_stats["modules"]:
+            if module["status"] == "in-progress":
+                next_module = {
+                    "name": module["name"],
+                    "module_number": module["module_number"],
+                    "progress": module["progress"]
+                }
+                break
+            elif module["status"] == "upcoming":
+                next_module = {
+                    "name": module["name"],
+                    "module_number": module["module_number"],
+                    "progress": 0
+                }
+                break
+        
+        response_data = {
+            "status": "success",
+            "data": {
+                "active_agents": 4,
+                "overall_progress": module_stats["overall_progress"],
+                "completed_modules": module_stats["completed_count"],
+                "total_modules": module_stats["total_modules"],
+                "in_progress_modules": module_stats["in_progress_count"],
+                "learning_streak": learning_streak,
+                "estimated_time_spent": round(estimated_time_spent, 1),
+                "next_module": next_module,
+                "learning_style": module_stats["learning_style"],
+                "risk_tolerance": module_stats["risk_tolerance"],
+                "last_activity": progress_data[-1][3] if progress_data else None
+            }
+        }
+        
+        return json.dumps(response_data)
+        
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Error generating dashboard stats: {str(e)}",
+            "data": None
+        })
+
+def start_learning_module(user_id: str, module_number: int) -> str:
+    """Starts a learning module and returns structured response."""
+    try:
+        # Get user's learning path
+        learning_path = db.get_user_learning_path(user_id)
+        
+        if not learning_path:
+            return json.dumps({
+                "status": "error",
+                "message": "No learning path found. Complete assessment first.",
+                "data": None
+            })
+        
+        modules = learning_path["path_data"].get("modules", [])
+        
+        if module_number < 1 or module_number > len(modules):
+            return json.dumps({
+                "status": "error",
+                "message": f"Invalid module number. Available modules: 1-{len(modules)}",
+                "data": None
+            })
+        
+        module = modules[module_number - 1]
+        
+        # Save progress - starting module (1% to indicate started)
+        success = db.save_progress(user_id, f"module_{module_number}", 1, 0)
         
         if success:
-            return f"Content request sent to delivery agent. Use get_content_response to retrieve the content."
-        else:
-            return "Error sending content request."
+            response_data = {
+                "status": "success",
+                "message": f"Module {module_number} started successfully",
+                "data": {
+                    "module_number": module_number,
+                    "module_title": module.get('title', 'Unknown'),
+                    "topic": module.get('topic', 'unknown'),
+                    "difficulty": module.get('difficulty', 'beginner'),
+                    "duration": module.get('duration', '2-3 hours'),
+                    "progress": 1,
+                    "status": "in-progress",
+                    "content_areas": module.get('content_areas', []),
+                    "activities": module.get('activities', []),
+                    "learning_style": module.get('learning_style', 'analytical'),
+                    "started_at": "now"
+                }
+            }
             
-    except Exception as e:
-        return f"Error: {str(e)}"
-
-    
-def get_content_response(user_id: str) -> str:
-    """Retrieves content response from content delivery agent."""
-    try:
-        response = db.get_latest_handoff(user_id, "progress_agent")
-        if response and response.get("from_agent") == "content_delivery_agent":
-            return response["message_data"].get("content", "No content received")
+            return json.dumps(response_data)
         else:
-            return "No content response available yet."
+            return json.dumps({
+                "status": "error",
+                "message": "Error saving module start progress",
+                "data": None
+            })
+        
     except Exception as e:
-        return f"Error retrieving content: {str(e)}"
+        return json.dumps({
+            "status": "error",
+            "message": f"Error starting learning module: {str(e)}",
+            "data": None
+        })
 
+def save_progress(user_id: str, module_number: int, step_number: int, score: int) -> str:
+    """Saves progress and returns structured response."""
+    try:
+        # Validate inputs
+        if step_number < 0 or step_number > 100:
+            return json.dumps({
+                "status": "error",
+                "message": "Step number must be between 0-100 (percentage complete)",
+                "data": None
+            })
+        
+        if score < 0 or score > 100:
+            return json.dumps({
+                "status": "error",
+                "message": "Score must be between 0-100",
+                "data": None
+            })
+        
+        # Save progress to database
+        success = db.save_progress(user_id, f"module_{module_number}", step_number, score)
+        
+        if success:
+            # Determine performance level
+            performance_levels = {
+                90: {"level": "Excellent", "feedback": "Outstanding work! You've mastered this concept."},
+                80: {"level": "Good", "feedback": "Great job! You have a solid understanding."},
+                70: {"level": "Satisfactory", "feedback": "Good progress! Consider reviewing the key concepts."},
+                60: {"level": "Needs Improvement", "feedback": "You're getting there! Additional practice recommended."},
+                0: {"level": "Requires Review", "feedback": "Let's review this material together before moving forward."}
+            }
+            
+            performance = next(perf for threshold, perf in performance_levels.items() if score >= threshold)
+            
+            response_data = {
+                "status": "success",
+                "message": "Progress saved successfully",
+                "data": {
+                    "module_number": module_number,
+                    "step_number": step_number,
+                    "score": score,
+                    "performance_level": performance["level"],
+                    "feedback": performance["feedback"],
+                    "is_completed": step_number >= 100,
+                    "progress_percentage": step_number,
+                    "saved_at": "now"
+                }
+            }
+            
+            return json.dumps(response_data)
+        else:
+            return json.dumps({
+                "status": "error",
+                "message": "Error saving progress to database",
+                "data": None
+            })
+        
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Error saving progress: {str(e)}",
+            "data": None
+        })
+
+def complete_module(user_id: str, module_number: int, final_score: int) -> str:
+    """Completes a module and returns structured response."""
+    try:
+        # Save final progress as 100% complete
+        success = db.save_progress(user_id, f"module_{module_number}", 100, final_score)
+        
+        if not success:
+            return json.dumps({
+                "status": "error",
+                "message": "Error saving module completion",
+                "data": None
+            })
+        
+        # Get learning path for context
+        learning_path = db.get_user_learning_path(user_id)
+        total_modules = 0
+        module_title = f"Module {module_number}"
+        
+        if learning_path:
+            modules = learning_path["path_data"].get("modules", [])
+            total_modules = len(modules)
+            if module_number <= len(modules):
+                module_title = modules[module_number - 1].get("title", f"Module {module_number}")
+        
+        # Determine certificate level
+        certificates = {
+            90: "Gold Certificate",
+            80: "Silver Certificate", 
+            70: "Bronze Certificate",
+            0: "Completion Certificate"
+        }
+        
+        certificate = next(cert for threshold, cert in certificates.items() if final_score >= threshold)
+        
+        # Check overall progress
+        progress_data = db.get_user_progress(user_id)
+        completed_modules = len(set(module_id for module_id, step, score, date in progress_data 
+                                   if step >= 100))
+        
+        # Determine next steps
+        next_steps = []
+        if completed_modules < total_modules:
+            next_steps = [
+                f"Continue to Module {module_number + 1}",
+                f"{total_modules - completed_modules} modules remaining"
+            ]
+        else:
+            next_steps = [
+                "All modules completed!",
+                "Ready for final assessment",
+                "Consider advanced topics"
+            ]
+        
+        response_data = {
+            "status": "success",
+            "message": "Module completed successfully",
+            "data": {
+                "module_number": module_number,
+                "module_title": module_title,
+                "final_score": final_score,
+                "certificate": certificate,
+                "completed_modules": completed_modules,
+                "total_modules": total_modules,
+                "overall_progress": round((completed_modules / total_modules * 100)) if total_modules > 0 else 100,
+                "next_steps": next_steps,
+                "is_all_complete": completed_modules >= total_modules,
+                "completed_at": "now"
+            }
+        }
+        
+        return json.dumps(response_data)
+        
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Error completing module: {str(e)}",
+            "data": None
+        })
+
+def get_user_progress(user_id: str) -> str:
+    """Returns detailed user progress as structured JSON."""
+    try:
+        # Get progress data
+        progress_data = db.get_user_progress(user_id)
+        
+        if not progress_data:
+            return json.dumps({
+                "status": "error",
+                "message": "No learning progress found. Start a learning module first.",
+                "data": None
+            })
+        
+        # Get learning path for context
+        learning_path = db.get_user_learning_path(user_id)
+        total_modules = 0
+        if learning_path:
+            total_modules = learning_path["path_data"].get("total_modules", 0)
+        
+        # Organize progress by module
+        module_progress = {}
+        for module_id, step_number, score, completed_at in progress_data:
+            module_num = int(module_id.replace("module_", ""))
+            if module_num not in module_progress:
+                module_progress[module_num] = []
+            module_progress[module_num].append({
+                "step": step_number,
+                "score": score,
+                "completed_at": completed_at
+            })
+        
+        # Calculate statistics
+        completed_modules = sum(1 for module_num, steps in module_progress.items() 
+                               if any(step["step"] >= 100 for step in steps))
+        
+        total_scores = []
+        module_details = []
+        
+        for module_num in sorted(module_progress.keys()):
+            steps = module_progress[module_num]
+            latest = max(steps, key=lambda x: x["completed_at"])
+            
+            status = "completed" if latest["step"] >= 100 else "in-progress"
+            total_scores.append(latest["score"])
+            
+            module_details.append({
+                "module_number": module_num,
+                "status": status,
+                "progress": latest["step"],
+                "score": latest["score"],
+                "last_updated": latest["completed_at"]
+            })
+        
+        average_score = sum(total_scores) / len(total_scores) if total_scores else 0
+        
+        response_data = {
+            "status": "success",
+            "data": {
+                "modules_started": len(module_progress),
+                "modules_completed": completed_modules,
+                "total_modules": total_modules,
+                "average_score": round(average_score, 1),
+                "overall_progress": round((completed_modules / total_modules * 100)) if total_modules > 0 else 0,
+                "module_details": module_details,
+                "user_id": user_id
+            }
+        }
+        
+        return json.dumps(response_data)
+        
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Error retrieving progress: {str(e)}",
+            "data": None
+        })
+
+# Keep the existing text-based tools for backwards compatibility
 def get_planning_handoff(user_id: str) -> str:
-    """Retrieves the latest learning path handoff data from the planning agent.
-
-    Args:
-        user_id (str): The unique identifier for the user whose learning path to retrieve.
-
-    Returns:
-        str: Formatted learning path summary or error message if no handoff found.
-    """
+    """Retrieves the latest learning path handoff data from the planning agent."""
     try:
         handoff = db.get_latest_handoff(user_id, "progress_agent")
         
@@ -99,366 +490,8 @@ Available Modules:"""
     except Exception as e:
         return f"Error retrieving planning handoff: {str(e)}"
 
-def start_learning_module(user_id: str, module_number: int) -> str:
-    """Starts a specific learning module for the user and provides initial content.
-
-    Args:
-        user_id (str): The unique identifier for the user starting the module.
-        module_number (int): The module number to start (1-based indexing).
-
-    Returns:
-        str: Module introduction and content overview or error message.
-    """
-    try:
-        # Get user's learning path
-        learning_path = db.get_user_learning_path(user_id)
-        
-        if not learning_path:
-            return "No learning path found. Complete assessment and planning phases first."
-        
-        modules = learning_path["path_data"].get("modules", [])
-        
-        if module_number < 1 or module_number > len(modules):
-            return f"Invalid module number. Available modules: 1-{len(modules)}"
-        
-        module = modules[module_number - 1]
-        
-        # Save progress - starting module
-        success = db.save_progress(user_id, f"module_{module_number}", 0, 0)
-        
-        if success:
-            # Format module introduction
-            response = f"""🎓 Starting Module {module_number}: {module.get('title', 'Unknown')}
-
-Module Details:
-• Topic: {module.get('topic', 'unknown').replace('_', ' ').title()}
-• Difficulty: {module.get('difficulty', 'unknown').title()}
-• Duration: {module.get('duration', 'unknown')}
-• Learning Style: {module.get('learning_style', 'unknown').title()}
-
-Content Areas:"""
-            
-            for area in module.get('content_areas', []):
-                response += f"\n• {area}"
-            
-            response += f"\n\nLearning Activities:"
-            for activity in module.get('activities', []):
-                response += f"\n• {activity}"
-            
-            response += f"\n\nRisk Focus: {module.get('risk_focus', 'Balanced approach')}"
-            response += f"\n\n✅ Module started! Progress saved."
-            
-            return response
-        else:
-            return "Error saving module start progress."
-        
-    except Exception as e:
-        return f"Error starting learning module: {str(e)}"
-
-def save_progress(user_id: str, module_number: int, step_number: int, score: int) -> str:
-    """Saves user's progress within a learning module with performance score.
-
-    Args:
-        user_id (str): The unique identifier for the user.
-        module_number (int): The module number being completed.
-        step_number (int): The step within the module (0-100 for percentage).
-        score (int): Performance score for the step (0-100).
-
-    Returns:
-        str: Progress confirmation message or error message.
-    """
-    try:
-        # Validate inputs
-        if step_number < 0 or step_number > 100:
-            return "Step number must be between 0-100 (percentage complete)."
-        
-        if score < 0 or score > 100:
-            return "Score must be between 0-100."
-        
-        # Save progress to database
-        success = db.save_progress(user_id, f"module_{module_number}", step_number, score)
-        
-        if success:
-            # Determine performance level
-            if score >= 90:
-                performance = "Excellent"
-                feedback = "Outstanding work! You've mastered this concept."
-            elif score >= 80:
-                performance = "Good"
-                feedback = "Great job! You have a solid understanding."
-            elif score >= 70:
-                performance = "Satisfactory"
-                feedback = "Good progress! Consider reviewing the key concepts."
-            elif score >= 60:
-                performance = "Needs Improvement"
-                feedback = "You're getting there! Additional practice recommended."
-            else:
-                performance = "Requires Review"
-                feedback = "Let's review this material together before moving forward."
-            
-            response = f"""📊 Progress Saved!
-
-Module {module_number} Progress:
-• Step: {step_number}% complete
-• Score: {score}/100
-• Performance: {performance}
-• Feedback: {feedback}
-
-✅ Progress updated successfully!"""
-            
-            # Check if module is complete
-            if step_number >= 100:
-                response += f"\n\n🎉 Module {module_number} completed!"
-            
-            return response
-        else:
-            return "Error saving progress to database."
-        
-    except Exception as e:
-        return f"Error saving progress: {str(e)}"
-
-def get_user_progress(user_id: str) -> str:
-    """Retrieves and displays the user's current learning progress across all modules.
-
-    Args:
-        user_id (str): The unique identifier for the user whose progress to retrieve.
-
-    Returns:
-        str: Formatted progress summary showing completion status and scores.
-    """
-    try:
-        # Get progress data
-        progress_data = db.get_user_progress(user_id)
-        
-        if not progress_data:
-            return "No learning progress found. Start a learning module first."
-        
-        # Get learning path for context
-        learning_path = db.get_user_learning_path(user_id)
-        total_modules = 0
-        if learning_path:
-            total_modules = learning_path["path_data"].get("total_modules", 0)
-        
-        # Organize progress by module
-        module_progress = {}
-        for module_id, step_number, score, completed_at in progress_data:
-            if module_id not in module_progress:
-                module_progress[module_id] = []
-            module_progress[module_id].append({
-                "step": step_number,
-                "score": score,
-                "completed_at": completed_at
-            })
-        
-        # Calculate overall statistics
-        completed_modules = sum(1 for module_id, steps in module_progress.items() 
-                               if any(step["step"] >= 100 for step in steps))
-        
-        total_scores = []
-        for steps in module_progress.values():
-            if steps:
-                latest_score = max(steps, key=lambda x: x["completed_at"])["score"]
-                total_scores.append(latest_score)
-        
-        average_score = sum(total_scores) / len(total_scores) if total_scores else 0
-        
-        # Format response
-        response = f"""📈 Your Learning Progress
-
-Overall Summary:
-• Modules started: {len(module_progress)}
-• Modules completed: {completed_modules}
-• Total modules available: {total_modules}
-• Average score: {average_score:.1f}%
-
-Module Details:"""
-        
-        for module_id in sorted(module_progress.keys()):
-            steps = module_progress[module_id]
-            latest = max(steps, key=lambda x: x["completed_at"])
-            
-            module_num = module_id.replace("module_", "")
-            status = "✅ Completed" if latest["step"] >= 100 else f"🔄 {latest['step']}% complete"
-            
-            response += f"\nModule {module_num}: {status} (Score: {latest['score']}%)"
-        
-        return response
-        
-    except Exception as e:
-        return f"Error retrieving progress: {str(e)}"
-
-def adapt_difficulty(user_id: str, module_number: int, current_score: int) -> str:
-    """Adapts learning difficulty based on user performance in current module.
-
-    Args:
-        user_id (str): The unique identifier for the user.
-        module_number (int): The module number to adapt.
-        current_score (int): User's current performance score (0-100).
-
-    Returns:
-        str: Difficulty adaptation recommendations and next steps.
-    """
-    try:
-        # Get user's learning style and risk tolerance
-        learning_path = db.get_user_learning_path(user_id)
-        
-        if not learning_path:
-            return "No learning path found for difficulty adaptation."
-        
-        learning_style = learning_path["path_data"].get("learning_style", "analytical")
-        risk_tolerance = learning_path["path_data"].get("risk_tolerance", "moderate")
-        
-        # Determine adaptation strategy based on score
-        if current_score >= 90:
-            difficulty_change = "increase"
-            recommendation = "Excellent performance! Let's challenge you with advanced concepts."
-            next_action = "Add bonus advanced materials and accelerated learning path."
-            
-        elif current_score >= 80:
-            difficulty_change = "maintain"
-            recommendation = "Great work! Continue at current difficulty level."
-            next_action = "Proceed with standard curriculum progression."
-            
-        elif current_score >= 60:
-            difficulty_change = "slight_decrease"
-            recommendation = "Good effort! Let's reinforce concepts with additional practice."
-            next_action = "Add supplementary exercises and review materials."
-            
-        else:
-            difficulty_change = "decrease"
-            recommendation = "Let's slow down and focus on fundamentals."
-            next_action = "Switch to basic explanations and guided practice."
-        
-        # Customize adaptation based on learning style
-        style_adaptations = []
-        if learning_style == "visual":
-            if difficulty_change == "increase":
-                style_adaptations.append("Add complex charts and advanced visualizations")
-            elif difficulty_change == "decrease":
-                style_adaptations.append("Use simpler diagrams and step-by-step visual guides")
-            else:
-                style_adaptations.append("Continue with current visual approach")
-                
-        elif learning_style == "hands-on":
-            if difficulty_change == "increase":
-                style_adaptations.append("Introduce advanced simulations and real-world scenarios")
-            elif difficulty_change == "decrease":
-                style_adaptations.append("Provide more guided practice and simplified exercises")
-            else:
-                style_adaptations.append("Maintain current interactive approach")
-                
-        else:  # analytical
-            if difficulty_change == "increase":
-                style_adaptations.append("Add detailed case studies and complex analysis")
-            elif difficulty_change == "decrease":
-                style_adaptations.append("Break down concepts into smaller analytical steps")
-            else:
-                style_adaptations.append("Continue with current analytical depth")
-        
-        response = f"""🎯 Difficulty Adaptation for Module {module_number}
-
-Performance Analysis:
-• Current score: {current_score}%
-• Difficulty change: {difficulty_change.replace('_', ' ').title()}
-• Learning style: {learning_style.title()}
-
-Recommendation: {recommendation}
-
-Adaptations:
-• Next action: {next_action}
-• Style adaptation: {style_adaptations[0]}
-
-✅ Difficulty adapted based on performance!"""
-        
-        return response
-        
-    except Exception as e:
-        return f"Error adapting difficulty: {str(e)}"
-
-def complete_module(user_id: str, module_number: int, final_score: int) -> str:
-    """Marks a learning module as completed and provides completion summary.
-
-    Args:
-        user_id (str): The unique identifier for the user completing the module.
-        module_number (int): The module number being completed.
-        final_score (int): Final performance score for the module (0-100).
-
-    Returns:
-        str: Module completion summary and next steps recommendation.
-    """
-    try:
-        # Save final progress as 100% complete
-        success = db.save_progress(user_id, f"module_{module_number}", 100, final_score)
-        
-        if not success:
-            return "Error saving module completion."
-        
-        # Get learning path for context
-        learning_path = db.get_user_learning_path(user_id)
-        total_modules = 0
-        module_title = f"Module {module_number}"
-        
-        if learning_path:
-            modules = learning_path["path_data"].get("modules", [])
-            total_modules = len(modules)
-            if module_number <= len(modules):
-                module_title = modules[module_number - 1].get("title", f"Module {module_number}")
-        
-        # Determine performance level and certificate status
-        if final_score >= 90:
-            performance = "Outstanding"
-            certificate = "Gold Certificate"
-        elif final_score >= 80:
-            performance = "Excellent"
-            certificate = "Silver Certificate"
-        elif final_score >= 70:
-            performance = "Good"
-            certificate = "Bronze Certificate"
-        else:
-            performance = "Completed"
-            certificate = "Completion Certificate"
-        
-        # Check overall progress
-        progress_data = db.get_user_progress(user_id)
-        completed_modules = len(set(module_id for module_id, step, score, date in progress_data 
-                                   if step >= 100))
-        
-        response = f"""🎉 Module Completed!
-
-{module_title}:
-• Final Score: {final_score}%
-• Performance: {performance}
-• Certificate Earned: {certificate}
-
-Progress Summary:
-• Modules completed: {completed_modules}/{total_modules}
-• Overall progress: {(completed_modules/total_modules*100):.1f}%"""
-        
-        # Provide next steps
-        if completed_modules < total_modules:
-            response += f"\n\nNext Steps:\n• Continue to Module {module_number + 1}"
-            response += f"\n• {total_modules - completed_modules} modules remaining"
-        else:
-            response += f"\n\n🏆 Congratulations! All modules completed!"
-            response += f"\n• Ready for final assessment"
-            response += f"\n• Consider advanced topics or practical application"
-        
-        response += f"\n\n"
-        
-        return response
-        
-    except Exception as e:
-        return f"Error completing module: {str(e)}"
-
 def get_database_info(user_id: str) -> str:
-    """Retrieves database statistics and progress agent specific information for debugging.
-
-    Args:
-        user_id (str): The unique identifier for the user requesting database information.
-
-    Returns:
-        str: Formatted database statistics and progress-specific data.
-    """
+    """Retrieves database statistics and progress agent specific information for debugging."""
     try:
         stats = db.get_database_stats()
         
@@ -481,42 +514,3 @@ User Progress Data:
         
     except Exception as e:
         return f"Error retrieving database info: {str(e)}"
-    
-
-def get_dashboard_stats(user_id: str) -> Dict[str, Any]:
-    return {
-        "status": "success",
-        "data": {
-            "active_agents": 4,
-            "overall_progress": 33,
-            "completed_modules": 2,
-            "total_modules": 6,
-            "learning_streak": 3,
-            "total_time_invested": "4h 30m"
-        }
-    }
-
-def get_learning_modules(user_id: str) -> Dict[str, Any]:
-    return {
-        "status": "success", 
-        "data": {
-            "modules": [
-                {
-                    "name": "Investment Basics",
-                    "progress": 0,
-                    "status": "in-progress",
-                    "last_accessed": "2025-01-15T09:45:00Z",
-                    "estimated_time_remaining": "2 hours"
-                },
-                {
-                    "name": "Risk Assessment", 
-                    "progress": 0,
-                    "status": "completed",
-                    "completion_date": "2025-01-14T16:30:00Z"
-                }
-            ],
-            "total_modules": 6,
-            "completed_count": 2,
-            "overall_progress": 33
-        }
-    }

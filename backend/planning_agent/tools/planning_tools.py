@@ -42,7 +42,7 @@ Knowledge Areas:"""
     except Exception as e:
         return f"Error retrieving assessment handoff: {str(e)}"
 
-def create_learning_path(user_id: str) -> str:
+def create_learning_path(user_id: str) -> dict[str, Any]:
     """Creates a personalized learning curriculum based on user's assessment results.
 
     Args:
@@ -113,22 +113,7 @@ def create_learning_path(user_id: str) -> str:
         success = db.save_learning_path(user_id, learning_path, "planning_agent")
         
         if success:
-            # Format response
-            response = f"""🎯 Personalized Learning Path Created!
-
-Learning Profile:
-• Risk Tolerance: {primary_risk_tolerance.title()}
-• Learning Style: {primary_learning_style.title()}
-• Total Modules: {len(learning_modules)}
-• Estimated Time: {learning_path['estimated_duration']}
-
-Learning Modules:"""
-            
-            for i, module in enumerate(learning_modules, 1):
-                response += f"\n{i}. {module['title']} ({module['difficulty']}) - {module['duration']}"
-            
-            response += "\n\n✅ Learning path saved successfully!"
-            return response
+            return learning_path
         else:
             return "Error saving learning path to database."
         

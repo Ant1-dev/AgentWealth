@@ -65,7 +65,7 @@
             ← Previous
           </button>
           <span class="step-indicator">
-            Step {{ currentStepNumber() }} of {{ currentStep()!.total_steps }}
+            Step {{ currentStepNumber() }} of {{ currentStep()!.totalSteps }}
           </span>
           <button class="nav-btn next" (click)="nextStep()" [disabled]="!canProceedToNextStep()">
             Next Step →

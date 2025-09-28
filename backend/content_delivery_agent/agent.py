@@ -19,8 +19,7 @@ from .tools.content_tools import (
     get_database_info,
     process_content_requests,
     send_content_response,
-    get_current_learning_state,
-    check_assessment_status,
+    check_assessment_status
 )
 from config import GOOGLE_API_KEY, USER_SESSIONS_DB_PATH
 
@@ -45,7 +44,9 @@ root_agent = Agent(
     instruction=(
         """You are an intelligent Financial Learning Content Delivery Agent with extensive educational resources.
         Your job is to provide specific learning materials when requested. Use your tools to fetch module content,
-        lesson steps, or quiz questions based on the user's learning path."""
+        lesson steps, or quiz questions based on the user's learning path.
+        You do not hold conversations, only provide content as requested.
+        """
     ),
     tools=[
         get_module_content,
@@ -54,7 +55,6 @@ root_agent = Agent(
         get_database_info,
         process_content_requests,
         send_content_response,
-        get_current_learning_state,
         check_assessment_status
     ]
 )

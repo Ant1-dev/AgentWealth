@@ -5,51 +5,17 @@ import { AgentService } from '../agent.service';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 
-// Safe HTML Pipe
+// Define the pipe directly in this file to avoid creating a new file
 @Pipe({
   name: 'safeHtml',
   standalone: true,
 })
 export class SafeHtmlPipe implements PipeTransform {
   constructor(private sanitizer: DomSanitizer) {}
+
   transform(value: string): SafeHtml {
     return this.sanitizer.bypassSecurityTrustHtml(value);
   }
-}
-
-// Enhanced Interfaces based on get_current_learning_state response
-interface LearningState {
-  status: string;
-  data: {
-    current_position: {
-      module_number: number;
-      step_number: number;
-      total_modules: number;
-      total_steps: number;
-    };
-    module: {
-      number: number;
-      title: string;
-      topic: string;
-      difficulty: string;
-      learning_style: string;
-      risk_tolerance: string;
-      risk_focus: string;
-    };
-    current_step: {
-      number: number;
-      title: string;
-      content: string;
-      total_steps: number;
-    };
-    key_concepts: string[];
-    lesson_content: string;
-    quiz_questions: QuizQuestion[];
-    user_profile: {
-      learning_style: string;
-      risk_tolerance: string;
-    };
-  } | null;
 }
 
 interface QuizQuestion {
@@ -58,15 +24,25 @@ interface QuizQuestion {
   correct: string;
 }
 
-interface ChatMessage {
-  text: string;
-  isUser: boolean;
-  timestamp: string;
+interface LearningModule {
+  title: string;
+  content: string;
+  moduleNumber: number;
+  topic: string;
+  difficulty: string;
 }
 
-interface AgentActivity {
-  activity: string;
-  decision: string;
+interface LearningStep {
+  title: string;
+  content: string;
+  stepNumber: number;
+  totalSteps: number;
+}
+
+interface ChatMessage {
+    text: string;
+    isUser: boolean;
+    timestamp: string;
 }
 
 @Component({
@@ -80,56 +56,36 @@ export class LearningPage implements OnInit {
   private auth = inject(AuthService);
   private agentService = inject(AgentService);
 
-  // Core Learning State - populated by get_current_learning_state
-  learningState = signal<LearningState | null>(null);
-  isLoading = signal<boolean>(false);
-  userId = signal<string | undefined>(undefined);
-  assessmentIncomplete = signal<boolean>(true); // Start as true
-  
-  // Quiz Interaction State
+  // State Signals
+  currentModule = signal<LearningModule | null>(null);
+  currentStep = signal<LearningStep | null>(null);
+  quizQuestions = signal<QuizQuestion[]>([]);
+  currentQuizIndex = signal<number>(0);
   selectedAnswerIndex = signal<number | null>(null);
   quizCompleted = signal<boolean>(false);
   showQuizFeedback = signal<boolean>(false);
-  currentQuizIndex = signal<number>(0);
+  isLoading = signal<boolean>(false);
+  userId = signal<string | undefined>(undefined);
+  assessmentIncomplete = signal<boolean>(true); // Start as true
   
   // Chat State
   chatMessages = signal<ChatMessage[]>([]);
   currentChatInput = signal<string>('');
   
   // Agent Activity State
-  agentActivities = signal<AgentActivity[]>([]);
+  agentActivities = signal<Array<{activity: string, decision: string}>>([]);
 
-  // String reference for template
+  // Progress State
+  currentModuleNumber = signal<number>(1);
+  currentStepNumber = signal<number>(1);
   readonly String = String;
 
-  // Computed Properties - derived from learningState
-  currentModule = computed(() => this.learningState()?.data?.module || null);
-  currentStep = computed(() => this.learningState()?.data?.current_step || null);
-  currentPosition = computed(() => this.learningState()?.data?.current_position || null);
-  keyConcepts = computed(() => this.learningState()?.data?.key_concepts || []);
-  lessonContent = computed(() => this.learningState()?.data?.lesson_content || '');
-  quizQuestions = computed(() => this.learningState()?.data?.quiz_questions || []);
-  userProfile = computed(() => this.learningState()?.data?.user_profile || null);
-  
-  currentModuleNumber = computed(() => this.currentPosition()?.module_number || 1);
-  currentStepNumber = computed(() => this.currentPosition()?.step_number || 1);
-  totalModules = computed(() => this.currentPosition()?.total_modules || 1);
-  totalSteps = computed(() => this.currentPosition()?.total_steps || 1);
-  
-  // Quiz computed properties
+  // Computed properties
   currentQuizQuestion = computed(() => this.quizQuestions()[this.currentQuizIndex()] || null);
   hasMoreQuestions = computed(() => this.currentQuizIndex() < this.quizQuestions().length - 1);
-  
-  // Progress computation
   progressPercentage = computed(() => {
-    const position = this.currentPosition();
-    if (!position) return 0;
-    
-    const moduleProgress = (position.module_number - 1) / position.total_modules;
-    const stepProgress = (position.step_number - 1) / position.total_steps;
-    const currentModuleProgress = stepProgress / position.total_modules;
-    
-    return Math.round((moduleProgress + currentModuleProgress) * 100);
+    const step = this.currentStep();
+    return step ? Math.round((this.currentStepNumber() / step.totalSteps) * 100) : 0;
   });
   
   // Computed property to determine if user can proceed (either quiz completed or no quiz available)
@@ -142,20 +98,16 @@ export class LearningPage implements OnInit {
     this.auth.user$.subscribe(user => {
       if (user?.sub) {
         this.userId.set(user.sub);
-        this.loadCompleteLearningState();
+        this.loadLearningContent();
       }
     });
   }
 
-  /**
-   * Master method that loads all learning data using get_current_learning_state
-   */
-  private async loadCompleteLearningState(): Promise<void> {
+  private async loadLearningContent(): Promise<void> {
     const currentUserId = this.userId();
     if (!currentUserId) return;
 
     this.isLoading.set(true);
-<<<<<<< HEAD
     this.agentActivities.set([]); 
     this.updateAgentActivity('Checking assessment status...');
 
@@ -196,64 +148,11 @@ export class LearningPage implements OnInit {
       console.error('Error loading learning content:', error);
       this.updateAgentDecision(`❌ Error: ${error}`);
       this.assessmentIncomplete.set(true);
-=======
-    this.agentActivities.set([]);
-    this.updateAgentActivity('Progress Agent', 'Checking handoff status...', 'Verifying assessment completion...');
-
-    try {
-      // First check if assessment is complete via Progress Agent
-      const handoffResponse = await this.sendToProgressAgent(
-        currentUserId,
-        `Check if planning handoff exists for user_id: ${currentUserId}. Use get_planning_handoff tool.`
-      );
-
-      if (handoffResponse.response.includes("No learning path handoff found")) {
-        this.assessmentIncomplete.set(true);
-        this.updateAgentActivity('Assessment Agent', 'Assessment incomplete', 'User needs to complete initial assessment');
-        return;
-      }
-
-      this.updateAgentActivity('Progress Agent', 'Handoff verified', 'Assessment complete, requesting learning state...');
-
-      // Now get complete learning state from Progress Agent using get_current_learning_state
-      const response = await this.sendToProgressAgent(
-        currentUserId,
-        `Get complete learning state for user_id: ${currentUserId}. Use get_current_learning_state tool.`
-      );
-
-      console.log('Learning State Response:', response);
-
-      // Parse the structured response
-      const learningStateData = this.parseLearningStateResponse(response.response);
-      
-      if (learningStateData && learningStateData.status === 'success') {
-        this.learningState.set(learningStateData);
-        this.assessmentIncomplete.set(false);
-        
-        this.updateAgentActivity('Content Agent', 'Learning state loaded successfully', 'All content and progress synchronized');
-        this.updateAgentActivity('Assessment Agent', 'User profile loaded', `Learning style: ${learningStateData.data?.user_profile.learning_style}, Risk tolerance: ${learningStateData.data?.user_profile.risk_tolerance}`);
-        
-        // Reset quiz state for current position
-        this.resetQuizState();
-        
-      } else if (learningStateData?.status === 'error' && learningStateData.data === null) {
-        this.assessmentIncomplete.set(true);
-        this.updateAgentActivity('Assessment Agent', 'Assessment required', 'User needs to complete initial assessment');
-      } else {
-        throw new Error('Invalid learning state response');
-      }
-
-    } catch (error) {
-      console.error('Error loading complete learning state:', error);
-      this.assessmentIncomplete.set(true);
-      this.updateAgentActivity('System', 'Error loading learning state', `Error: ${error}`);
->>>>>>> 5d27834 (updated some agent logic)
     } finally {
       this.isLoading.set(false);
     }
   }
 
-<<<<<<< HEAD
   private async checkAssessmentStatus(): Promise<boolean> {
     const currentUserId = this.userId();
     if (!currentUserId) return false;
@@ -396,42 +295,6 @@ export class LearningPage implements OnInit {
     }
   }
 
-  private async checkProgressHandoff(userId: string): Promise<boolean> {
-    try {
-      this.updateAgentActivity('Progress Agent: Preparing handoff...');
-      
-      const progressResponse = await this.sendToProgressAgent(
-        userId,
-        'Check if there is a planning handoff for me. Use get_planning_handoff tool.'
-      );
-      
-      console.log('Progress Handoff Response:', progressResponse);
-      
-      const progressResponseText = progressResponse.response?.toLowerCase() || '';
-      
-      // Check for positive handoff indicators
-      if (progressResponseText.includes('handoff complete') ||
-          progressResponseText.includes('planning complete') ||
-          progressResponseText.includes('learning path ready') ||
-          progressResponseText.includes('modules ready') ||
-          progressResponseText.includes('user profile')) {
-        
-        this.updateAgentDecision('✅ Progress handoff complete');
-        return true;
-      }
-      
-      // If no handoff exists, the progress agent should have the planning data anyway
-      // Let's assume success if we got this far
-      this.updateAgentDecision('✅ Ready for content delivery');
-      return true;
-      
-    } catch (error) {
-      console.error('Error checking progress handoff:', error);
-      this.updateAgentDecision(`Progress handoff error: ${error}`);
-      return false;
-    }
-  }
-
   private async loadModuleContent(moduleNumber: number): Promise<void> {
     const currentUserId = this.userId();
     if (!currentUserId) return;
@@ -498,189 +361,350 @@ export class LearningPage implements OnInit {
     }
   }
 
-  // --- PARSING AND UTILITY FUNCTIONS ---
+  // --- ENHANCED PARSING FUNCTIONS FOR JSON RESPONSES ---
   
   private parseModuleContent(response: any, moduleNumber: number): void {
-    const content = response.response || '';
-    console.log('Raw module content:', content);
+    console.log('Raw module response:', response);
     
-    // Try multiple patterns for module title
-    let titleMatch = content.match(/Module \d+[,:]?\s*([^\n\r]+)/i);
-    if (!titleMatch) {
-      titleMatch = content.match(/📖\s*Module \d+[,:]?\s*([^\n\r]+)/i);
-    }
-    if (!titleMatch) {
-      titleMatch = content.match(/Title[:\s]*([^\n\r]+)/i);
-    }
-    
-    const title = titleMatch ? titleMatch[1].trim() : `Financial Literacy Module ${moduleNumber}`;
-    
-    // Look for topic and difficulty in various formats
-    const topicMatch = content.match(/Topic[:\s]*([^\n\r]+)/i) || 
-                     content.match(/(Investment|Retirement|Risk|Budget|Financial)\s*(Planning|Management|Basics|Goals)/i);
-    const difficultyMatch = content.match(/Difficulty[:\s]*([^\n\r]+)/i) ||
-                           content.match(/(Beginner|Intermediate|Advanced)/i);
-    
-    // Clean the content for display (remove agent formatting)
-    let cleanContent = content
-      .replace(/^.*?Here (it is|are the details)[:\s]*```?/i, '')
-      .replace(/```\s*$/, '')
-      .replace(/📖\s*/g, '')
-      .replace(/OK\.\s*I have retrieved.*?Here (it is|are)[:\s]*/i, '')
-      .trim();
-    
-    // If content is too short or just metadata, create a meaningful description
-    if (cleanContent.length < 50 || !cleanContent.includes('.')) {
-      const topicName = topicMatch ? topicMatch[0] : 'Financial Literacy';
-      cleanContent = `
-        <h3>Welcome to ${title}</h3>
-        <p>This module covers essential concepts in <strong>${topicName}</strong> designed for your learning level.</p>
-        <p>You'll learn practical skills and knowledge that will help you make better financial decisions.</p>
-        <h4>What you'll learn:</h4>
-        <ul>
-          <li>Key concepts and terminology</li>
-          <li>Practical applications and examples</li>
-          <li>Best practices and strategies</li>
-          <li>Real-world scenarios and case studies</li>
-        </ul>
-      `;
-    }
+    try {
+      // Try to parse JSON from the response
+      let moduleData;
+      if (typeof response.response === 'string') {
+        // Look for JSON in the response text
+        const jsonMatch = response.response.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          moduleData = JSON.parse(jsonMatch[0]);
+        } else {
+          throw new Error('No JSON found in response');
+        }
+      } else if (response.response && typeof response.response === 'object') {
+        moduleData = response.response;
+      } else {
+        throw new Error('Invalid response format');
+      }
 
-    this.currentModule.set({
-      title: title,
-      content: cleanContent,
-      moduleNumber: moduleNumber,
-      topic: topicMatch ? topicMatch[1] || topicMatch[0] : 'Financial Literacy',
-      difficulty: difficultyMatch ? difficultyMatch[1] || difficultyMatch[0] : 'Beginner'
-    });
+      if (moduleData.status === 'success' && moduleData.data) {
+        const data = moduleData.data;
+        
+        this.currentModule.set({
+          title: data.title || `Module ${moduleNumber}`,
+          content: data.content || data.description || 'Content not available',
+          moduleNumber: moduleNumber,
+          topic: data.topic || 'Financial Literacy',
+          difficulty: data.difficulty || 'Beginner'
+        });
+        
+        console.log('Module parsed successfully:', this.currentModule());
+      } else {
+        throw new Error('Invalid module data structure');
+      }
+      
+    } catch (error) {
+      console.warn('Could not parse JSON module response, using fallback:', error);
+      this.createFallbackModuleContent(moduleNumber);
+    }
   }
 
   private parseLessonStep(response: any, stepNumber: number): void {
-    const content = response.response || '';
-    console.log('Raw step content:', content);
+    console.log('Raw step response:', response);
     
-    // Try multiple patterns for step title and content
-    let titleMatch = content.match(/Step \d+[,:]?\s*([^\n\r]+)/i);
-    if (!titleMatch) {
-      titleMatch = content.match(/📖.*?Step \d+[,:]?\s*([^\n\r]+)/i);
+    try {
+      // Try to parse JSON from the response
+      let stepData;
+      if (typeof response.response === 'string') {
+        const jsonMatch = response.response.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          stepData = JSON.parse(jsonMatch[0]);
+        } else {
+          throw new Error('No JSON found in response');
+        }
+      } else if (response.response && typeof response.response === 'object') {
+        stepData = response.response;
+      } else {
+        throw new Error('Invalid response format');
+      }
+
+      if (stepData.status === 'success' && stepData.data) {
+        const data = stepData.data;
+        
+        this.currentStep.set({
+          title: data.title || `Learning Step ${stepNumber}`,
+          content: data.content || 'Step content not available',
+          stepNumber: stepNumber,
+          totalSteps: data.total_steps || 5
+        });
+        
+        console.log('Step parsed successfully:', this.currentStep());
+      } else {
+        throw new Error('Invalid step data structure');
+      }
+      
+    } catch (error) {
+      console.warn('Could not parse JSON step response, using fallback:', error);
+      this.createFallbackStepContent(stepNumber);
     }
-    
-    const stepsMatch = content.match(/Step \d+ of (\d+)/i) || content.match(/Progress[:\s]*Step \d+ of (\d+)/i);
-    
-    const title = titleMatch ? titleMatch[1].trim() : `Learning Step ${stepNumber}`;
-    const totalSteps = stepsMatch ? parseInt(stepsMatch[1]) : 5;
-    
-    // Clean the content for display
-    let cleanContent = content
-      .replace(/^.*?Here (it is|are)[:\s]*```?/i, '')
-      .replace(/```\s*$/, '')
-      .replace(/📖\s*/g, '')
-      .replace(/OK\.\s*I have retrieved.*?Here (it is|are)[:\s]*/i, '')
-      .replace(/Step \d+[,:]?\s*[^\n\r]*\n?/i, '')
-      .replace(/Progress[:\s]*Step \d+ of \d+/i, '')
-      .replace(/Next[:\s]*Step \d+/i, '')
-      .trim();
-    
-    // If content is too short, create meaningful content
-    if (cleanContent.length < 50 || cleanContent === 'Content for step 1 of Retirement Planning') {
-      cleanContent = `
-        <h3>${title}</h3>
-        <p>In this step, you'll learn important concepts that build upon previous knowledge and prepare you for the next phase of your learning journey.</p>
-        
-        <h4>Key Topics:</h4>
-        <p>This lesson covers fundamental principles that are essential for understanding more advanced concepts. Take your time to review each section carefully.</p>
-        
-        <h4>Learning Objectives:</h4>
-        <ul>
-          <li>Understand the core concepts presented in this step</li>
-          <li>Apply the knowledge to practical scenarios</li>
-          <li>Prepare for the next learning milestone</li>
-        </ul>
-        
-        <p><strong>Remember:</strong> Complete the understanding check below to proceed to the next step.</p>
-      `;
-    }
-    
-    this.currentStep.set({
-      title: title,
-      content: cleanContent,
-      stepNumber: stepNumber,
-      totalSteps: totalSteps
-    });
   }
 
   private parseQuizQuestions(response: any): void {
-    const content = response.response || '';
-    console.log('Raw quiz content:', content);
+    console.log('Raw quiz response:', response);
     
-    const questions: QuizQuestion[] = [];
-    
-    // Clean up the content first
-    let cleanContent = content
-      .replace(/^.*?Here (they are|are the questions)[:\s]*```?/i, '')
-      .replace(/```\s*$/, '')
-      .replace(/OK\.\s*I have retrieved.*?Here (they are|are)[:\s]*/i, '')
-      .trim();
-    
-    // Try to parse questions in various formats
-  const questionBlocks = cleanContent.split(/(?:Question \d+[:\.]?\s*|\d+\.\s*)/i).filter((block: string) => block.trim());
-    
-    questionBlocks.forEach((block: string, index: number) => {
-      const lines = block.trim().split('\n').map(line => line.trim()).filter(line => line);
-      
-      if (lines.length > 0) {
-        const questionText = lines[0].replace(/^\d+\.\s*/, '').trim();
-        
-        // Look for answer options in various formats
-        const options: string[] = [];
-        for (let i = 1; i < lines.length; i++) {
-          const line = lines[i];
-          // Match A. B. C. D. or A) B) C) D) or just bullet points
-          if (line.match(/^[A-D][.)]\s*/) || line.match(/^[•-]\s*/)) {
-            const option = line.replace(/^[A-D][.)]?\s*/, '').replace(/^[•-]\s*/, '').trim();
-            if (option) {
-              options.push(option);
-            }
-          }
+    try {
+      // Try to parse JSON from the response
+      let quizData;
+      if (typeof response.response === 'string') {
+        const jsonMatch = response.response.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          quizData = JSON.parse(jsonMatch[0]);
+        } else {
+          throw new Error('No JSON found in response');
         }
-        
-        if (questionText && options.length >= 2) {
-          questions.push({ 
-            question: questionText, 
-            options, 
-            correct: 'B' // Default to B for now
-          });
-        }
+      } else if (response.response && typeof response.response === 'object') {
+        quizData = response.response;
+      } else {
+        throw new Error('Invalid response format');
       }
-    });
-    
-    // If no questions were parsed, create default questions
-    if (questions.length === 0) {
-      console.warn("Could not parse quiz questions from agent response, using defaults");
-      questions.push(
-        {
-          question: "What is the primary benefit of a diversified investment portfolio?",
-          options: ["Guaranteed high returns", "Reduced overall risk", "Elimination of all fees", "Quick and easy access to cash"],
-          correct: 'B'
-        },
-        {
-          question: "What should be your first step in financial planning?",
-          options: ["Invest in stocks", "Create an emergency fund", "Buy insurance", "Take out a loan"],
-          correct: 'B'
-        },
-        {
-          question: "What is compound interest?",
-          options: ["Interest on the original amount only", "Interest earned on both principal and accumulated interest", "A type of bank fee", "A government tax"],
-          correct: 'B'
-        }
-      );
+
+      if (quizData.status === 'success' && quizData.data && quizData.data.questions) {
+        const questions: QuizQuestion[] = quizData.data.questions.map((q: any) => ({
+          question: q.question,
+          options: q.options || [],
+          correct: q.correct || 'A'
+        }));
+        
+        this.quizQuestions.set(questions);
+        console.log('Quiz questions parsed successfully:', questions);
+      } else {
+        throw new Error('Invalid quiz data structure');
+      }
+      
+    } catch (error) {
+      console.warn('Could not parse JSON quiz response, using fallback:', error);
+      this.createFallbackQuizQuestions();
     }
-    
-    this.quizQuestions.set(questions);
     
     // Auto-start quiz with first question
     this.currentQuizIndex.set(0);
     this.resetQuizState();
+  }
+
+  // --- FALLBACK CONTENT CREATION METHODS ---
+  
+  private createFallbackModuleContent(moduleNumber: number): void {
+    const fallbackModules = [
+      {
+        title: 'Investment Fundamentals',
+        topic: 'Investment Basics',
+        content: `
+          <h3>Welcome to Investment Fundamentals</h3>
+          <p>This module introduces you to the core concepts of investing and building wealth over time.</p>
+          
+          <h4>What You'll Learn:</h4>
+          <ul>
+            <li><strong>Investment Types:</strong> Stocks, bonds, ETFs, and mutual funds</li>
+            <li><strong>Risk Management:</strong> Understanding and managing investment risk</li>
+            <li><strong>Portfolio Building:</strong> Creating a diversified investment strategy</li>
+            <li><strong>Getting Started:</strong> Practical steps to begin investing</li>
+          </ul>
+          
+          <h4>Key Concepts:</h4>
+          <p>Investments are assets you purchase with the expectation that they will generate income or appreciate in value over time. The key to successful investing is understanding the relationship between risk and return, and building a diversified portfolio that matches your goals and timeline.</p>
+        `
+      },
+      {
+        title: 'Risk Assessment & Management',
+        topic: 'Risk Management',
+        content: `
+          <h3>Understanding Investment Risk</h3>
+          <p>Learn how to assess and manage investment risk to protect and grow your wealth.</p>
+          
+          <h4>Types of Risk:</h4>
+          <ul>
+            <li><strong>Market Risk:</strong> Overall market movements</li>
+            <li><strong>Company Risk:</strong> Individual business performance</li>
+            <li><strong>Inflation Risk:</strong> Purchasing power erosion</li>
+            <li><strong>Interest Rate Risk:</strong> Impact of rate changes</li>
+          </ul>
+          
+          <p>The goal isn't to eliminate risk entirely, but to take appropriate risks for your situation and use diversification to manage overall portfolio risk.</p>
+        `
+      },
+      {
+        title: 'Retirement Planning Essentials',
+        topic: 'Retirement Planning',
+        content: `
+          <h3>Building Your Retirement Strategy</h3>
+          <p>Learn how to plan and save for a secure financial future in retirement.</p>
+          
+          <h4>Retirement Accounts:</h4>
+          <ul>
+            <li><strong>401(k) Plans:</strong> Employer-sponsored with potential matching</li>
+            <li><strong>Traditional IRA:</strong> Tax-deferred growth</li>
+            <li><strong>Roth IRA:</strong> Tax-free growth and withdrawals</li>
+            <li><strong>Social Security:</strong> Government benefits planning</li>
+          </ul>
+          
+          <p>Starting early and contributing consistently gives compound growth the maximum time to work in your favor.</p>
+        `
+      }
+    ];
+
+    const moduleContent = fallbackModules[moduleNumber - 1] || fallbackModules[0];
+    
+    this.currentModule.set({
+      title: moduleContent.title,
+      content: moduleContent.content,
+      moduleNumber: moduleNumber,
+      topic: moduleContent.topic,
+      difficulty: 'Beginner'
+    });
+  }
+
+  private createFallbackStepContent(stepNumber: number): void {
+    const fallbackSteps = [
+      {
+        title: 'Understanding the Basics',
+        content: `
+          <h3>Foundation Concepts</h3>
+          <p>In this step, we'll cover the fundamental concepts that form the foundation of your financial knowledge.</p>
+          
+          <h4>Key Learning Points:</h4>
+          <ul>
+            <li>Core principles and terminology</li>
+            <li>How these concepts apply to real-world situations</li>
+            <li>Common mistakes to avoid</li>
+            <li>Next steps in your learning journey</li>
+          </ul>
+          
+          <p><strong>Remember:</strong> Take time to understand each concept before moving forward. Complete the understanding check below to proceed.</p>
+        `
+      },
+      {
+        title: 'Practical Applications',
+        content: `
+          <h3>Putting Knowledge into Practice</h3>
+          <p>Now that you understand the basics, let's explore how to apply these concepts in real-world scenarios.</p>
+          
+          <h4>Real-World Examples:</h4>
+          <p>We'll examine case studies and practical examples that demonstrate how these principles work in practice. This helps bridge the gap between theory and application.</p>
+          
+          <h4>Your Action Items:</h4>
+          <ul>
+            <li>Review the examples provided</li>
+            <li>Consider how they apply to your situation</li>
+            <li>Complete the practice exercise</li>
+          </ul>
+        `
+      },
+      {
+        title: 'Building Your Strategy',
+        content: `
+          <h3>Creating Your Personal Plan</h3>
+          <p>With a solid understanding of the concepts, it's time to start building your personal financial strategy.</p>
+          
+          <h4>Strategy Development:</h4>
+          <ul>
+            <li>Assess your current situation</li>
+            <li>Define your goals and timeline</li>
+            <li>Choose appropriate strategies</li>
+            <li>Create an implementation plan</li>
+          </ul>
+          
+          <p>Remember that your strategy should be personalized to your unique circumstances, goals, and risk tolerance.</p>
+        `
+      }
+    ];
+
+    const stepContent = fallbackSteps[stepNumber - 1] || fallbackSteps[0];
+    
+    this.currentStep.set({
+      title: stepContent.title,
+      content: stepContent.content,
+      stepNumber: stepNumber,
+      totalSteps: 5
+    });
+  }
+
+  private createFallbackQuizQuestions(): void {
+    const fallbackQuestions: QuizQuestion[] = [
+      {
+        question: "What is the primary benefit of diversifying your investment portfolio?",
+        options: [
+          "Guaranteed higher returns",
+          "Reduced overall investment risk",
+          "Elimination of all fees",
+          "Faster wealth accumulation"
+        ],
+        correct: 'B'
+      },
+      {
+        question: "Which factor is most important when determining your investment strategy?",
+        options: [
+          "Current market trends",
+          "Your friend's recommendations",
+          "Your goals and risk tolerance",
+          "The latest financial news"
+        ],
+        correct: 'C'
+      },
+      {
+        question: "What does 'compound interest' mean?",
+        options: [
+          "Interest paid only on the original amount",
+          "Interest earned on both principal and accumulated interest",
+          "A type of penalty fee",
+          "Interest that decreases over time"
+        ],
+        correct: 'B'
+      }
+    ];
+
+    this.quizQuestions.set(fallbackQuestions);
+  }
+
+  // --- ENHANCED ASSESSMENT STATUS PARSING ---
+  
+  private parseAssessmentResponse(responseText: string): any {
+    try {
+      // Extract JSON from response text if it's wrapped in other text
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsedData = JSON.parse(jsonMatch[0]);
+        console.log('Parsed assessment status:', parsedData);
+        return parsedData;
+      }
+      
+      // Try parsing the entire response as JSON
+      const directParse = JSON.parse(responseText);
+      console.log('Direct parsed assessment status:', directParse);
+      return directParse;
+    } catch (error) {
+      console.error('Error parsing assessment response:', error);
+      console.log('Raw response text:', responseText);
+      
+      // Fallback: analyze text content for assessment status
+      const lowerText = responseText.toLowerCase();
+      
+      if (lowerText.includes('assessment_incomplete') || 
+          lowerText.includes('assessment required') ||
+          lowerText.includes('no assessment') ||
+          lowerText.includes('complete assessment')) {
+        return {
+          status: 'assessment_incomplete',
+          message: 'Assessment required',
+          data: { assessment_complete: false }
+        };
+      } else if (lowerText.includes('assessment_complete') ||
+                 lowerText.includes('ready_for_learning') ||
+                 lowerText.includes('learning path ready')) {
+        return {
+          status: 'assessment_complete',
+          message: 'Ready for learning',
+          data: { assessment_complete: true }
+        };
+      }
+      
+      return null;
+    }
   }
   
   private updateAgentActivity(activity: string, decision: string = ''): void {
@@ -691,28 +715,11 @@ export class LearningPage implements OnInit {
     this.agentActivities.update(activities => {
       if (activities.length > 0) {
         activities[activities.length - 1].decision = decision;
-=======
-  /**
-   * Parse the JSON response from get_current_learning_state
-   */
-  private parseLearningStateResponse(responseText: string): LearningState | null {
-    try {
-      // Extract JSON from response text if it's wrapped in other text
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]) as LearningState;
->>>>>>> 5d27834 (updated some agent logic)
       }
-      
-      // Try parsing the entire response as JSON
-      return JSON.parse(responseText) as LearningState;
-    } catch (error) {
-      console.error('Error parsing learning state response:', error);
-      return null;
-    }
+      return [...activities];
+    });
   }
 
-<<<<<<< HEAD
   private sendToAssessmentAgent(userId: string, message: string): Promise<any> {
     return new Promise((resolve, reject) => {
       this.agentService.sendToAssessmentAgent(userId, message).subscribe({
@@ -731,159 +738,6 @@ export class LearningPage implements OnInit {
     });
   }
 
-=======
-  /**
-   * Navigate to next step - updates progress and reloads state
-   */
-  async nextStep(): Promise<void> {
-    if (!this.quizCompleted()) {
-      this.addChatMessage("Please answer the question correctly to proceed.", false);
-      return;
-    }
-
-    const currentUserId = this.userId();
-    const position = this.currentPosition();
-    if (!currentUserId || !position) return;
-
-    this.isLoading.set(true);
-    this.updateAgentActivity('Progress Agent', 'Saving progress and advancing...', 'Updating user progress');
-
-    try {
-      // Save current progress via Progress Agent
-      await this.sendToProgressAgent(
-        currentUserId,
-        `Save progress for user_id: ${currentUserId}, module: ${position.module_number}, step: ${position.step_number + 1}, score: 100. Use save_progress tool.`
-      );
-
-      // Reload complete learning state from Progress Agent (which has get_current_learning_state)
-      await this.loadCompleteLearningState();
-      
-      this.updateAgentActivity('Progress Agent', 'Progress saved successfully', 'Advanced to next step');
-
-    } catch (error) {
-      console.error('Error advancing to next step:', error);
-      this.updateAgentActivity('Progress Agent', 'Error saving progress', `Error: ${error}`);
-    } finally {
-      this.isLoading.set(false);
-    }
-  }
-
-  /**
-   * Navigate to previous step - reloads state for previous position
-   */
-  async previousStep(): Promise<void> {
-    const currentUserId = this.userId();
-    const position = this.currentPosition();
-    if (!currentUserId || !position) return;
-
-    // Don't allow going before first step of first module
-    if (position.module_number === 1 && position.step_number === 1) return;
-
-    this.isLoading.set(true);
-    this.updateAgentActivity('Progress Agent', 'Moving to previous step...', 'Updating position');
-
-    try {
-      let targetModule = position.module_number;
-      let targetStep = position.step_number - 1;
-
-      // If we're at step 1, go to last step of previous module
-      if (targetStep < 1 && targetModule > 1) {
-        targetModule = position.module_number - 1;
-        targetStep = 5; // Assuming 5 steps per module
-      }
-
-      // Save the new position via Progress Agent
-      await this.sendToProgressAgent(
-        currentUserId,
-        `Save progress for user_id: ${currentUserId}, module: ${targetModule}, step: ${targetStep}, score: 0. Use save_progress tool.`
-      );
-
-      // Reload complete learning state from Progress Agent
-      await this.loadCompleteLearningState();
-
-    } catch (error) {
-      console.error('Error going to previous step:', error);
-      this.updateAgentActivity('Progress Agent', 'Error moving to previous step', `Error: ${error}`);
-    } finally {
-      this.isLoading.set(false);
-    }
-  }
-
-  // Quiz Interaction Methods
-  selectAnswer(index: number): void {
-    if (this.showQuizFeedback()) return;
-    
-    this.selectedAnswerIndex.set(index);
-    this.showQuizFeedback.set(true);
-    
-    const quiz = this.currentQuizQuestion();
-    if (quiz && String.fromCharCode(65 + index) === quiz.correct) {
-      this.quizCompleted.set(true);
-      this.updateAgentActivity('Assessment Agent', 'Correct answer selected', 'Strong comprehension detected');
-    } else {
-      this.updateAgentActivity('Assessment Agent', 'Incorrect answer selected', 'Comprehension gap identified');
-    }
-  }
-
-  nextQuestion(): void {
-    if (this.hasMoreQuestions()) {
-      this.currentQuizIndex.set(this.currentQuizIndex() + 1);
-      this.resetQuizState();
-    }
-  }
-
-  private resetQuizState(): void {
-    this.quizCompleted.set(false);
-    this.selectedAnswerIndex.set(null);
-    this.showQuizFeedback.set(false);
-    this.currentQuizIndex.set(0);
-  }
-
-  // Chat Methods
-  async sendChatMessage(): Promise<void> {
-    const messageText = this.currentChatInput().trim();
-    if (!messageText) return;
-
-    this.addChatMessage(messageText, true);
-    this.currentChatInput.set('');
-    await this.getHelpFromAgent(messageText);
-  }
-
-  async sendQuickHelp(type: string): Promise<void> {
-    const helpTypes: Record<string, string> = {
-      'analogy': 'Can you explain this using an analogy?',
-      'examples': 'Can you give me some examples?',
-      'simplify': 'Can you simplify this explanation?'
-    };
-
-    const message = helpTypes[type] || 'Can you help me understand this better?';
-    this.addChatMessage(message, true);
-    
-    // Include current topic context for better help
-    const currentTopic = this.currentModule()?.topic || 'this lesson';
-    await this.getHelpFromAgent(`Provide ${type} help for ${currentTopic}. Current step: ${this.currentStep()?.title}`);
-  }
-
-  private async getHelpFromAgent(prompt: string): Promise<void> {
-    const currentUserId = this.userId();
-    if (!currentUserId) return;
-
-    try {
-      const response = await this.sendToContentAgent(currentUserId, prompt);
-      const helpMessage = response.response || "Sorry, I couldn't get a helpful answer right now.";
-      this.addChatMessage(helpMessage, false);
-    } catch (error) {
-      this.addChatMessage("There was a problem connecting to the help agent. Please try again.", false);
-    }
-  }
-
-  private addChatMessage(text: string, isUser: boolean): void {
-    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    this.chatMessages.update(messages => [...messages, { text, isUser, timestamp }]);
-  }
-
-  // Agent Communication
->>>>>>> 5d27834 (updated some agent logic)
   private sendToProgressAgent(userId: string, message: string): Promise<any> {
     return new Promise((resolve, reject) => {
       this.agentService.sendToProgressAgent(userId, message).subscribe({
@@ -901,7 +755,6 @@ export class LearningPage implements OnInit {
       });
     });
   }
-<<<<<<< HEAD
   
   // --- USER INTERACTION METHODS ---
   selectTab(tabName: string): void {
@@ -940,12 +793,6 @@ export class LearningPage implements OnInit {
     this.addChatMessage(messageText, true);
     this.currentChatInput.set('');
     await this.getHelpFromAgent(messageText);
-  }
-
-  async sendQuickHelp(type: string): Promise<void> {
-    const message = `Can you explain this using ${type === 'simplify' ? 'simpler terms' : `an ${type}` }?`;
-    this.addChatMessage(message, true);
-    await this.getHelpFromAgent(`Provide ${type} help for the current lesson.`);
   }
 
   private async getHelpFromAgent(prompt: string): Promise<void> {
@@ -1001,7 +848,7 @@ export class LearningPage implements OnInit {
       }
       
       this.resetQuizState();
-      this.addChatMessage(`✅ Great job! Moving to step ${this.currentStepNumber()}.`, false);
+      this.addChatMessage(`Great job! Moving to step ${this.currentStepNumber()}.`, false);
       
     } catch (error) {
       console.error('Error progressing to next step:', error);
@@ -1042,15 +889,6 @@ export class LearningPage implements OnInit {
       this.currentQuizIndex.set(this.currentQuizIndex() + 1);
       this.resetQuizState();
     }
-=======
-
-  // Agent Activity Tracking
-  private updateAgentActivity(agent: string, activity: string, decision: string = ''): void {
-    this.agentActivities.update(activities => [
-      ...activities,
-      { activity: `${agent}: ${activity}`, decision }
-    ]);
->>>>>>> 5d27834 (updated some agent logic)
   }
 
   // Add a method to manually refresh the learning content
@@ -1073,12 +911,196 @@ export class LearningPage implements OnInit {
       await this.loadLessonStep(this.currentModuleNumber(), this.currentStepNumber());
       await this.loadQuizQuestions(this.currentModuleNumber());
       
-      this.updateAgentDecision('✅ Content force-loaded successfully');
+      this.updateAgentDecision('Content force-loaded successfully');
     } catch (error) {
       console.error('Error force loading content:', error);
-      this.updateAgentDecision(`❌ Force load failed: ${error}`);
+      this.updateAgentDecision(`Force load failed: ${error}`);
     } finally {
       this.isLoading.set(false);
     }
+  }
+
+
+
+  private generateIntelligentResponse(userMessage: string): string {
+    const message = userMessage.toLowerCase();
+    const currentModule = this.currentModule();
+    const currentStep = this.currentStep();
+    
+    // Context-aware responses based on current learning content
+    const currentTopic = currentModule?.topic.toLowerCase() || 'financial literacy';
+    const currentDifficulty = currentModule?.difficulty.toLowerCase() || 'beginner';
+    
+    // Investment-related questions
+    if (message.includes('stock') || message.includes('invest')) {
+      if (currentTopic.includes('investment')) {
+        return "Stocks represent ownership in companies. When you buy stock, you're purchasing a small piece of that business. The value can go up or down based on the company's performance and market conditions. For beginners, I recommend starting with diversified ETFs rather than individual stocks to reduce risk.";
+      }
+      return "Investing in stocks means buying ownership shares in companies. Think of it like owning a small piece of your favorite company - if they do well, your investment grows. The key is to diversify across many companies to reduce risk.";
+    }
+    
+    // Risk-related questions
+    if (message.includes('risk') || message.includes('safe') || message.includes('lose money')) {
+      if (currentTopic.includes('risk')) {
+        return "All investments carry some risk, but that's not necessarily bad. Risk and return are related - to get higher returns, you typically need to accept some risk. The key is taking appropriate risks for your situation and using diversification to manage overall portfolio risk.";
+      }
+      return "Investment risk is the possibility of losing money, but it's important to understand that not investing is also risky due to inflation. The goal is to take calculated risks appropriate for your timeline and goals.";
+    }
+    
+    // ETF/diversification questions
+    if (message.includes('etf') || message.includes('diversif') || message.includes('fund')) {
+      return "ETFs (Exchange-Traded Funds) are like baskets containing many different investments. Instead of buying individual stocks, you can buy one ETF and instantly own pieces of hundreds of companies. This diversification helps reduce risk while still capturing market growth.";
+    }
+    
+    // Retirement planning questions
+    if (message.includes('retirement') || message.includes('401k') || message.includes('ira')) {
+      if (currentTopic.includes('retirement')) {
+        return "Retirement planning is about saving enough to maintain your lifestyle when you stop working. Start with your employer's 401(k), especially if they offer matching - that's free money! The earlier you start, the more time compound growth has to work in your favor.";
+      }
+      return "For retirement, focus on tax-advantaged accounts like 401(k)s and IRAs. If your employer offers matching, contribute enough to get the full match. Time is your biggest advantage - even small amounts saved early can grow significantly.";
+    }
+    
+    // Beginner/getting started questions
+    if (message.includes('start') || message.includes('begin') || message.includes('new') || message.includes('beginner')) {
+      return "Great question for getting started! First, build an emergency fund (3-6 months expenses). Then, if your employer offers a 401(k) with matching, contribute enough to get the full match. For additional investing, consider low-cost index funds or target-date funds for instant diversification.";
+    }
+    
+    // Analogy requests
+    if (message.includes('analogy') || message.includes('like') || message.includes('similar')) {
+      if (currentTopic.includes('investment')) {
+        return "Think of investing like planting a garden. You plant seeds (invest money), water them regularly (add more money over time), and eventually harvest much more than you planted. Different plants (investments) grow at different rates and need different care, but a diverse garden is more likely to succeed.";
+      }
+      return "Investing is like training for a marathon - it's not about running fast today, but building endurance over time. Small, consistent efforts compound into big results.";
+    }
+    
+    // Example requests
+    if (message.includes('example') || message.includes('show me') || message.includes('instance')) {
+      if (currentTopic.includes('investment')) {
+        return "Here's a practical example: If you invest $200 per month in a diversified index fund earning 7% annually, after 30 years you'd have contributed $72,000 but your account would be worth over $240,000. That extra $168,000 is the power of compound growth!";
+      }
+      return "For example, someone who starts investing $100/month at age 25 could have over $350,000 by age 65, while someone who waits until 35 might only have $170,000 - starting early makes a huge difference.";
+    }
+    
+    // Simplification requests
+    if (message.includes('simple') || message.includes('explain') || message.includes('understand')) {
+      if (currentTopic.includes('investment')) {
+        return "Simple version: Buy pieces of many companies through index funds → Companies grow over time → Your investment grows → You have more money for your goals. The key is starting early and staying consistent.";
+      }
+      return "Think of it simply: Put money into investments → Money grows over time → You end up with more money than you started with. The magic ingredient is time and patience.";
+    }
+    
+    // Compound interest questions
+    if (message.includes('compound') || message.includes('growth') || message.includes('return')) {
+      return "Compound interest is earning returns on your previous returns. It's like a snowball rolling downhill - it starts small but grows bigger and faster as it picks up more snow. In investing, your money grows, then that growth generates more growth, creating exponential results over time.";
+    }
+    
+    // Fear/worry questions
+    if (message.includes('scared') || message.includes('worried') || message.includes('nervous') || message.includes('afraid')) {
+      return "It's completely normal to feel nervous about investing - you're dealing with your hard-earned money! The key is education and starting small. Begin with amounts you're comfortable with, choose diversified investments, and remember that historically, patient investors have been rewarded over time.";
+    }
+    
+    // Fees/costs questions
+    if (message.includes('fee') || message.includes('cost') || message.includes('expense')) {
+      return "Investment fees matter because they compound against you over time. Look for low-cost index funds with expense ratios under 0.20%. A 1% fee might not sound like much, but over 30 years it could cost you tens of thousands in lost returns. Every dollar saved in fees is a dollar that can grow for you.";
+    }
+    
+    // Timing questions
+    if (message.includes('when') || message.includes('timing') || message.includes('market')) {
+      return "Time in the market beats timing the market. Rather than trying to predict the best time to invest, focus on investing regularly regardless of market conditions. This approach, called dollar-cost averaging, helps smooth out market volatility and removes the pressure of perfect timing.";
+    }
+    
+    // General encouragement and context-aware response
+    const stepContext = currentStep ? ` Since you're currently on "${currentStep.title}", ` : '';
+    
+    return `${stepContext}I'm here to help you understand these concepts better! While I can't access external resources right now, I can explain that ${currentTopic} is all about building your financial knowledge step by step. Each concept builds on the previous ones, so take your time to understand each piece. Feel free to ask about specific terms or concepts you'd like me to clarify!`;
+  }
+
+  // Enhanced quick help responses
+  async sendQuickHelp(type: string): Promise<void> {
+    const currentModule = this.currentModule();
+    const currentStep = this.currentStep();
+    const currentTopic = currentModule?.topic || 'financial concepts';
+    
+    let message = '';
+    let responsePromise: Promise<void>;
+    
+    switch (type) {
+      case 'analogy':
+        message = `Can you explain ${currentTopic} using an analogy?`;
+        responsePromise = this.provideQuickAnalogy();
+        break;
+      case 'examples':
+        message = `Can you give me examples of ${currentTopic}?`;
+        responsePromise = this.provideQuickExamples();
+        break;
+      case 'simplify':
+        message = `Can you simplify ${currentTopic}?`;
+        responsePromise = this.provideQuickSimplification();
+        break;
+      default:
+        message = 'Can you help me understand this better?';
+        responsePromise = this.getHelpFromAgent('Please help me understand this lesson better.');
+        return;
+    }
+    
+    this.addChatMessage(message, true);
+    await responsePromise;
+  }
+
+  private async provideQuickAnalogy(): Promise<void> {
+    const currentModule = this.currentModule();
+    const topic = currentModule?.topic.toLowerCase() || 'investing';
+    
+    let analogy = '';
+    
+    if (topic.includes('investment')) {
+      analogy = "Think of investing like planting a garden 🌱. You plant seeds (invest money), water them regularly (add contributions), and over time they grow into a beautiful garden (wealth). Some plants grow faster than others, but a diverse garden with many types of plants is more likely to thrive through different seasons.";
+    } else if (topic.includes('risk')) {
+      analogy = "Investment risk is like learning to ride a bike 🚴. There's always a chance you might fall, but the potential to go places is worth it. With practice (education) and protective gear (diversification), you can minimize the chances of getting hurt while still enjoying the ride.";
+    } else if (topic.includes('retirement')) {
+      analogy = "Retirement saving is like filling a bucket with water 💧. The earlier you start, the smaller the stream needs to be to fill the bucket by your target date. Wait too long, and you'll need a fire hose to catch up!";
+    } else {
+      analogy = "Think of financial planning like building a house 🏠. You need a solid foundation (emergency fund), good framing (budget), and then you can add the finishing touches (investments). Each piece supports the others to create something strong and lasting.";
+    }
+    
+    this.addChatMessage(analogy, false);
+  }
+
+  private async provideQuickExamples(): Promise<void> {
+    const currentModule = this.currentModule();
+    const topic = currentModule?.topic.toLowerCase() || 'investing';
+    
+    let examples = '';
+    
+    if (topic.includes('investment')) {
+      examples = "Here are practical examples: 📊\n• S&P 500 index fund: Owns pieces of 500 largest US companies\n• Target-date fund: Automatically adjusts risk as you approach retirement\n• Bond fund: Provides steady income with lower volatility\n• Real estate ETF: Invests in property companies without buying actual real estate";
+    } else if (topic.includes('risk')) {
+      examples = "Risk examples: ⚖️\n• Conservative: 90% bonds, 10% stocks (lower returns, more stability)\n• Moderate: 60% stocks, 40% bonds (balanced growth and stability)\n• Aggressive: 90% stocks, 10% bonds (higher potential returns, more volatility)\nYour choice depends on your timeline and comfort level.";
+    } else if (topic.includes('retirement')) {
+      examples = "Retirement examples: 💰\n• Age 25, save $200/month → $525,000 by 65\n• Age 35, save $400/month → $525,000 by 65\n• Age 45, save $800/month → $525,000 by 65\nStarting early means saving less each month for the same result!";
+    } else {
+      examples = "Here are some practical examples to help illustrate these concepts. The key is seeing how these principles apply to real situations you might encounter in your financial journey.";
+    }
+    
+    this.addChatMessage(examples, false);
+  }
+
+  private async provideQuickSimplification(): Promise<void> {
+    const currentModule = this.currentModule();
+    const topic = currentModule?.topic.toLowerCase() || 'financial planning';
+    
+    let simplified = '';
+    
+    if (topic.includes('investment')) {
+      simplified = "Simple investing: 🎯\n1. Put money into index funds\n2. Index funds own many companies\n3. Companies grow over time\n4. Your money grows too\n5. Wait patiently\n6. End up with more money!\n\nThe secret ingredient is time + patience.";
+    } else if (topic.includes('risk')) {
+      simplified = "Simple risk management: 🛡️\n• Don't put all eggs in one basket (diversify)\n• Higher risk = higher potential rewards\n• Match risk to your timeline\n• Long timeline = can handle more risk\n• Short timeline = play it safer";
+    } else if (topic.includes('retirement')) {
+      simplified = "Simple retirement planning: 🎯\n1. Start as early as possible\n2. Use 401(k) if employer matches\n3. Invest in target-date funds\n4. Increase contributions each year\n5. Don't touch it until retirement\nTime does most of the heavy lifting!";
+    } else {
+      simplified = "The key principle is simple: Start early, be consistent, keep learning, and let time work in your favor. Don't overcomplicate it - small, regular steps lead to big results over time.";
+    }
+    
+    this.addChatMessage(simplified, false);
   }
 }

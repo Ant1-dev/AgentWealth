@@ -267,29 +267,6 @@ export class AgentDashboard implements OnInit, OnDestroy {
     });
   }
 
-  private async loadAllAgentData(): Promise<void> {
-    const results = await Promise.allSettled([
-      this.loadDashboardStats(),
-      this.loadLearningModules(),
-      this.loadPlanningInsights(),
-      this.loadAgentActivities(),
-    ]);
-
-    const agentNames = [
-      'Dashboard Stats',
-      'Learning Modules',
-      'Planning Insights',
-      'Agent Activities',
-    ];
-    results.forEach((result, index) => {
-      if (result.status === 'rejected') {
-        console.log(`${agentNames[index]} failed, using fallback data:`, result.reason);
-      } else {
-        console.log(`${agentNames[index]} loaded successfully`);
-      }
-    });
-  }
-
   private async loadDashboardStats(): Promise<void> {
     const currentUserId = this.userId();
     if (!currentUserId) return;
@@ -468,7 +445,7 @@ export class AgentDashboard implements OnInit, OnDestroy {
   }
 
   private startPeriodicUpdates(): void {
-    this.updateSubscription = interval(30000).subscribe(() => {
+    this.updateSubscription = interval(10000).subscribe(() => {
       if (this.isInitialized()) {
         this.updateAgentActivities();
       }
@@ -782,4 +759,86 @@ export class AgentDashboard implements OnInit, OnDestroy {
         return 'help_outline';
     }
   }
+
+  // Add these signals to your existing AgentDashboard class (after line 43)
+
+// Current module tracking signals
+currentModuleInfo = signal<{
+  moduleName: string;
+  moduleNumber: number;
+  stepNumber: number;
+  isActive: boolean;
+} | null>(null);
+
+// Add these computed properties (after line 52)
+currentModuleName = computed(() => this.currentModuleInfo()?.moduleName || 'No active module');
+currentModuleNumber = computed(() => this.currentModuleInfo()?.moduleNumber || 0);
+isUserLearning = computed(() => this.currentModuleInfo()?.isActive || false);
+
+// Add this method to your existing loadAllAgentData() call (around line 112)
+private async loadAllAgentData(): Promise<void> {
+  const results = await Promise.allSettled([
+    this.loadDashboardStats(),
+    this.loadLearningModules(),
+    this.loadPlanningInsights(),
+    this.loadAgentActivities(),
+    this.loadCurrentModuleInfo(),  // ADD THIS LINE
+  ]);
+
+  const agentNames = [
+    'Dashboard Stats',
+    'Learning Modules', 
+    'Planning Insights',
+    'Agent Activities',
+    'Current Module Info',  // ADD THIS LINE
+  ];
+  // ... rest of method stays the same
+}
+
+// Add this new method anywhere in your class
+private async loadCurrentModuleInfo(): Promise<void> {
+  const currentUserId = this.userId();
+  if (!currentUserId) return;
+
+  try {
+    const response = await this.sendToProgressAgent(
+      currentUserId,
+      `Get current module for user_id: ${currentUserId}. Use get_current_module tool.`
+    );
+
+    if (response.status === 'success' && response.data) {
+      this.currentModuleInfo.set({
+        moduleName: response.data.module_name || 'Unknown Module',
+        moduleNumber: response.data.module_number || 1,
+        stepNumber: response.data.step_number || 1,
+        isActive: response.data.is_active !== undefined ? response.data.is_active : true
+      });
+    } else {
+      // Fallback: find in-progress module from learning modules
+      const activeModule = this.learningModules().find(m => m.status === 'in-progress');
+      if (activeModule) {
+        const moduleIndex = this.learningModules().findIndex(m => m.name === activeModule.name);
+        this.currentModuleInfo.set({
+          moduleName: activeModule.name,
+          moduleNumber: moduleIndex + 1,
+          stepNumber: Math.floor(activeModule.progress / 10) + 1,
+          isActive: true
+        });
+      } else {
+        this.currentModuleInfo.set(null);
+      }
+    }
+  } catch (error) {
+    console.error('Error loading current module info:', error);
+    this.currentModuleInfo.set(null);
+  }
+}
+
+// Add this helper method for the template
+getCurrentModuleDisplay(): string {
+  const info = this.currentModuleInfo();
+  if (!info) return 'No active module';
+  if (!info.isActive) return info.moduleName;
+  return `${info.moduleName} (Step ${info.stepNumber})`;
+}
 }

@@ -14,16 +14,13 @@ import google.generativeai as genai
 # Import tools and configuration
 from .tools.progress_tools import (
     get_planning_handoff,
-    start_learning_module,
+    start_learning_module, 
     save_progress,
     get_user_progress,
-    adapt_difficulty,
     complete_module,
-    get_database_info,
-    get_content_from_delivery_agent,
-    get_content_response,
-    get_dashboard_stats,
-    get_learning_modules
+    get_dashboard_stats,  # <-- ADD THIS if you have it
+    get_learning_modules,  # <-- ADD THIS if you have it
+    # ... other tools
 )
 from config import GOOGLE_API_KEY, USER_SESSIONS_DB_PATH
 
@@ -48,18 +45,18 @@ root_agent = Agent(
     instruction=(
         """You are an intelligent Financial Learning Progress Tracking Agent.
         Your primary role is to guide a user through their learning path after receiving a handoff from the planning agent.
-        Use the get_planning_handoff tool to retrieve the user's curriculum, then use tools like start_learning_module and save_progress to track their journey."""
+        Use the get_planning_handoff tool to retrieve the user's curriculum, then use tools like start_learning_module and save_progress to track their journey.
+        You do not hold conversations, only provide content as requested.
+
+        
+        """
     ),
     tools=[
         get_planning_handoff,
         start_learning_module,
         save_progress,
         get_user_progress,
-        adapt_difficulty,
         complete_module,
-        get_database_info,
-        get_content_from_delivery_agent,
-        get_content_response,
         get_learning_modules,
         get_dashboard_stats
     ]
