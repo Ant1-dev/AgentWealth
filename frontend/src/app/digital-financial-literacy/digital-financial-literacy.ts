@@ -1,12 +1,17 @@
-import { Component, AfterViewInit } from '@angular/core';
+// src/app/digital-financial-literacy/digital-financial-literacy.ts
+import { Component, OnInit, OnDestroy, signal, computed, WritableSignal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Chart, registerables } from 'chart.js';
+import { StockMarketService, StockQuote, StockSearchResult, HistoricalDataPoint } from '../stock-market.service';
+import { debounceTime, Subject, Subscription } from 'rxjs';
 
-interface EtfData {
-  name: string;
-  price: number;
-  change: number;
-  changeDirection: 'up' | 'down';
+Chart.register(...registerables);
+
+interface PortfolioHolding {
+  symbol: string;
+  quantity: number;
+  averagePrice: number;
 }
 
 @Component({
@@ -16,174 +21,199 @@ interface EtfData {
   templateUrl: './digital-financial-literacy.html',
   styleUrls: ['./digital-financial-literacy.css']
 })
-export class DigitalFinancialLiteracy implements AfterViewInit {
-  portfolio = {
-    cash: 8347.50,
-    holdings: {} as { [key: string]: number },
-    totalValue: 10000.00
-  };
+export class DigitalFinancialLiteracy implements OnInit, OnDestroy {
+  // --- State Signals ---
+  cashBalance = signal<number>(10000); // Start with $10,000
+  portfolio = signal<PortfolioHolding[]>([]);
+  selectedStock = signal<StockQuote | null>(null);
+  
+  searchTerm: string = 'AAPL';
+  searchResults = signal<StockSearchResult[]>([]);
+  
+  buyQuantity: number | null = null;
+  sellQuantity: number | null = null;
+  
+  chartRange = signal<string>('1Y');
+  mockQuotes: { [key: string]: StockQuote } = {};
 
-  currentTrade = {
-    symbol: '',
-    price: 0,
-    quantity: 1
-  };
+  // --- Computed Values ---
+  portfolioValue = computed(() => {
+    return this.portfolio().reduce((total, holding) => {
+      const currentPrice = this.mockQuotes[holding.symbol]?.price || 0;
+      return total + (holding.quantity * currentPrice);
+    }, 0) + this.cashBalance();
+  });
+  
+  // --- Chart and Search ---
+  private stockChart: Chart | null = null;
+  private searchSubject = new Subject<string>();
+  private searchSubscription: Subscription | null = null;
 
-  etfData: { [key: string]: EtfData } = {
-    'VTI': { name: 'Vanguard Total Stock Market ETF', price: 230.45, change: 0.8, changeDirection: 'up' },
-    'VXUS': { name: 'Vanguard Total International Stock ETF', price: 58.20, change: 1.2, changeDirection: 'up' },
-    'BND': { name: 'Vanguard Total Bond Market ETF', price: 80.15, change: -0.1, changeDirection: 'down' }
-  };
+  constructor(private stockMarketService: StockMarketService) {}
 
-  etfs = ['VTI', 'VXUS', 'BND'];
-  selectedEtf: string | null = null;
-  coachMessage: string = "Welcome! Based on your profile, let's start with a mix of stocks (VTI) and bonds (BND).";
-  smartRecommendation: string = "Try buying 3 shares of VTI first ($691.35). It's a great way to own a piece of the entire US market.";
-  isModalOpen = false;
-  shareQuantity = 1;
-  totalCost = 0;
-  remainingCash = 0;
-  investedAmount = 1652.50;
-  portfolioPerformance = 0.0;
-  showAchievementPopup = false;
-  achievementTitle = '';
-  achievementDesc = '';
-  chartBars: { height: number }[] = [];
+  ngOnInit(): void {
+    // Debounce search input to avoid excessive API calls
+    this.searchSubscription = this.searchSubject.pipe(
+      debounceTime(300)
+    ).subscribe(query => {
+      if (query) {
+        this.stockMarketService.searchStocks(query).subscribe(results => {
+          this.searchResults.set(results);
+        });
+      } else {
+        this.searchResults.set([]);
+      }
+    });
 
-  ngAfterViewInit() {
-    this.initializeChart();
-    setInterval(() => this.simulateMarketMovement(), 10000);
-    this.updatePortfolioDisplay();
+    // Load default stock
+    this.selectStock('AAPL');
+    
+    // Simulate real-time updates for portfolio
+    setInterval(() => this.updatePortfolioQuotes(), 5000);
   }
 
-  // Helper function to safely access ETF data
-  getEtf(symbol: string): EtfData {
-    return this.etfData[symbol];
+  ngOnDestroy(): void {
+    this.searchSubscription?.unsubscribe();
+    this.stockChart?.destroy();
   }
 
-  getHoldingsCount(): number {
-    return Object.keys(this.portfolio.holdings).length;
+  // --- Stock Interaction ---
+  searchStocks(): void {
+    this.searchSubject.next(this.searchTerm);
   }
 
-  selectETF(symbol: string) {
-    this.selectedEtf = symbol;
-    this.updateAgentGuidance(symbol);
+  selectStock(symbol: string): void {
+    this.stockMarketService.getQuote(symbol).subscribe(quote => {
+      if (quote) {
+        this.selectedStock.set(quote);
+        this.mockQuotes[symbol] = quote; // Cache quote
+        this.updateChart();
+      }
+    });
+    this.searchResults.set([]);
+    this.searchTerm = symbol;
   }
 
-  updateAgentGuidance(symbol: string) {
-    const messages: { [key: string]: string } = {
-        'VTI': 'Excellent choice! VTI is a solid foundation for any portfolio, giving you broad exposure to US stocks.',
-        'VXUS': 'Smart move! Adding international stocks helps diversify your holdings beyond the US market.',
-        'BND': 'Great for stability. Bonds help cushion your portfolio during stock market downturns.'
-    };
-    const recommendations: { [key: string]: string } = {
-        'VTI': 'Consider starting with 2-3 shares. This should form the core of your stock holdings.',
-        'VXUS': 'A good starting point is 3-5 shares to build your international position.',
-        'BND': 'Purchase 3-4 shares to add a stable, income-generating asset to your portfolio.'
-    };
-    this.coachMessage = messages[symbol];
-    this.smartRecommendation = recommendations[symbol];
-  }
+  buyStock(): void {
+    const stock = this.selectedStock();
+    const quantity = this.buyQuantity;
 
-  openTradeModal(symbol: string, price: number, event: MouseEvent) {
-    event.stopPropagation();
-    this.currentTrade.symbol = symbol;
-    this.currentTrade.price = price;
-    this.shareQuantity = 1;
-    this.isModalOpen = true;
-    this.updateTradeSummary();
-  }
+    if (!stock || !quantity || quantity <= 0) return;
 
-  closeTradeModal() {
-    this.isModalOpen = false;
-  }
-
-  updateTradeSummary() {
-    this.currentTrade.quantity = this.shareQuantity || 1;
-    this.totalCost = this.currentTrade.quantity * this.currentTrade.price;
-    this.remainingCash = this.portfolio.cash - this.totalCost;
-  }
-
-  executeTrade() {
-    const totalCost = this.currentTrade.quantity * this.currentTrade.price;
-    if (totalCost > this.portfolio.cash) {
-      alert('Insufficient funds! Please try a smaller amount.');
+    const cost = stock.price * quantity;
+    if (this.cashBalance() < cost) {
+      alert('Not enough cash to complete this purchase.');
       return;
     }
-    this.portfolio.cash -= totalCost;
-    this.portfolio.holdings[this.currentTrade.symbol] = (this.portfolio.holdings[this.currentTrade.symbol] || 0) + this.currentTrade.quantity;
-    this.updatePortfolioDisplay();
-    this.closeTradeModal();
-    this.showAchievement(this.currentTrade.symbol);
-    this.updatePostTradeGuidance();
-  }
 
-  updatePortfolioDisplay() {
-    this.investedAmount = Object.keys(this.portfolio.holdings).reduce((total, symbol) => {
-        return total + (this.portfolio.holdings[symbol] * this.getEtf(symbol).price);
-    }, 0);
-    this.portfolio.totalValue = this.portfolio.cash + this.investedAmount;
-    const performance = ((this.portfolio.totalValue - 10000) / 10000) * 100;
-    this.portfolioPerformance = parseFloat(performance.toFixed(2));
-  }
-
-  getHoldings() {
-    return Object.keys(this.portfolio.holdings).map(symbol => ({
-      symbol,
-      shares: this.portfolio.holdings[symbol],
-      value: this.portfolio.holdings[symbol] * this.getEtf(symbol).price
-    }));
-  }
-
-  showAchievement(symbol: string) {
-    const achievements: { [key: string]: { title: string, desc: string } } = {
-        'VTI': { title: 'US Market Investor!', desc: 'You now own a piece of the entire US stock market.' },
-        'VXUS': { title: 'Global Investor!', desc: 'You\'ve successfully diversified with international stocks.' },
-        'BND': { title: 'Safety First!', desc: 'You\'ve added a stable foundation to your portfolio with bonds.' }
-    };
-    const achievement = achievements[symbol] || { title: 'First Investment!', desc: 'Congratulations on starting your investment journey!' };
-    this.achievementTitle = achievement.title;
-    this.achievementDesc = achievement.desc;
-    this.showAchievementPopup = true;
-    setTimeout(() => this.showAchievementPopup = false, 4000);
-  }
-
-  updatePostTradeGuidance() {
-    const holdingsCount = this.getHoldingsCount();
-    const messages = [
-        "Great first step! Now you're an investor. Consider adding a different type of asset to diversify.",
-        "Excellent diversification! A balanced portfolio is key to long-term growth.",
-        "Fantastic! You have a well-diversified portfolio. Now you can focus on making regular contributions."
-    ];
-    this.coachMessage = messages[Math.min(holdingsCount - 1, 2)];
-  }
-
-  showResearch(symbol: string, event: MouseEvent) {
-    event.stopPropagation();
-    const research: { [key: string]: string } = {
-        'VTI': 'VTI is a low-cost ETF that tracks the entire US stock market, including large, mid, and small-cap stocks.',
-        'VXUS': 'VXUS provides exposure to both developed and emerging international markets, excluding the US.',
-        'BND': 'BND is a broad, investment-grade bond ETF that provides stable income and lowers portfolio risk.'
-    };
-    alert(`${symbol} Research:\n\n${research[symbol]}`);
-  }
-
-  initializeChart() {
-    for (let i = 0; i < 20; i++) {
-        this.chartBars.push({ height: 20 + Math.random() * 80 });
-    }
-  }
-
-  simulateMarketMovement() {
-    this.etfs.forEach(symbol => {
-        const etf = this.getEtf(symbol);
-        const change = (Math.random() - 0.5) * 0.02;
-        etf.price *= (1 + change);
-        etf.change = change * 100;
-        etf.changeDirection = etf.change >= 0 ? 'up' : 'down';
+    this.cashBalance.update(balance => balance - cost);
+    this.portfolio.update(currentPortfolio => {
+      const existingHolding = currentPortfolio.find(h => h.symbol === stock.symbol);
+      if (existingHolding) {
+        // Update existing holding
+        const totalCost = (existingHolding.averagePrice * existingHolding.quantity) + cost;
+        const totalQuantity = existingHolding.quantity + quantity;
+        existingHolding.quantity = totalQuantity;
+        existingHolding.averagePrice = totalCost / totalQuantity;
+      } else {
+        // Add new holding
+        currentPortfolio.push({
+          symbol: stock.symbol,
+          quantity: quantity,
+          averagePrice: stock.price
+        });
+      }
+      return [...currentPortfolio]; // Return new array to trigger signal update
     });
-    if (this.getHoldingsCount() > 0) {
-        this.updatePortfolioDisplay();
+    
+    this.buyQuantity = null; // Reset input
+  }
+
+  sellStock(): void {
+    const stock = this.selectedStock();
+    const quantity = this.sellQuantity;
+    const holding = this.portfolio().find(h => h.symbol === stock?.symbol);
+
+    if (!stock || !quantity || quantity <= 0 || !holding) return;
+
+    if (holding.quantity < quantity) {
+      alert('You do not own enough shares to sell.');
+      return;
     }
+
+    const value = stock.price * quantity;
+    this.cashBalance.update(balance => balance + value);
+    this.portfolio.update(currentPortfolio => {
+      holding.quantity -= quantity;
+      if (holding.quantity === 0) {
+        // Remove holding if all shares are sold
+        return currentPortfolio.filter(h => h.symbol !== stock.symbol);
+      }
+      return [...currentPortfolio];
+    });
+
+    this.sellQuantity = null; // Reset input
+  }
+
+  // --- Charting ---
+  updateChartRange(range: string): void {
+    this.chartRange.set(range);
+    this.updateChart();
+  }
+
+  private updateChart(): void {
+    const symbol = this.selectedStock()?.symbol;
+    if (!symbol) return;
+    
+    this.stockMarketService.getHistoricalData(symbol, this.chartRange()).subscribe(data => {
+      this.renderChart(data);
+    });
+  }
+  
+  private renderChart(data: HistoricalDataPoint[]): void {
+    const labels = data.map(d => d.date);
+    const prices = data.map(d => d.close);
+    const ctx = document.getElementById('stockChart') as HTMLCanvasElement;
+
+    if (this.stockChart) {
+      this.stockChart.destroy();
+    }
+
+    this.stockChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: this.selectedStock()?.symbol,
+          data: prices,
+          borderColor: prices[prices.length - 1] >= prices[0] ? 'rgba(75, 192, 192, 1)' : 'rgba(255, 99, 132, 1)',
+          backgroundColor: prices[prices.length - 1] >= prices[0] ? 'rgba(75, 192, 192, 0.2)' : 'rgba(255, 99, 132, 0.2)',
+          fill: true,
+          pointRadius: 0,
+          tension: 0.1,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: { display: false },
+          y: { beginAtZero: false }
+        }
+      }
+    });
+  }
+  
+  // --- Portfolio Updates ---
+  private updatePortfolioQuotes(): void {
+    this.portfolio().forEach(holding => {
+      this.stockMarketService.getQuote(holding.symbol).subscribe(quote => {
+        if (quote) {
+          this.mockQuotes[holding.symbol] = quote;
+        }
+      });
+    });
+    // Trigger portfolio value recalculation by creating a new array
+    this.portfolio.set([...this.portfolio()]); 
   }
 }
