@@ -481,3 +481,42 @@ User Progress Data:
         
     except Exception as e:
         return f"Error retrieving database info: {str(e)}"
+    
+
+def get_dashboard_stats(user_id: str) -> Dict[str, Any]:
+    return {
+        "status": "success",
+        "data": {
+            "active_agents": 4,
+            "overall_progress": 33,
+            "completed_modules": 2,
+            "total_modules": 6,
+            "learning_streak": 3,
+            "total_time_invested": "4h 30m"
+        }
+    }
+
+def get_learning_modules(user_id: str) -> Dict[str, Any]:
+    return {
+        "status": "success", 
+        "data": {
+            "modules": [
+                {
+                    "name": "Investment Basics",
+                    "progress": 65,
+                    "status": "in-progress",
+                    "last_accessed": "2025-01-15T09:45:00Z",
+                    "estimated_time_remaining": "2 hours"
+                },
+                {
+                    "name": "Risk Assessment", 
+                    "progress": 100,
+                    "status": "completed",
+                    "completion_date": "2025-01-14T16:30:00Z"
+                }
+            ],
+            "total_modules": 6,
+            "completed_count": 2,
+            "overall_progress": 33
+        }
+    }

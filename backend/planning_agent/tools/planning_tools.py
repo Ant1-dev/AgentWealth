@@ -394,3 +394,21 @@ User Data:
         
     except Exception as e:
         return f"Error retrieving database info: {str(e)}"
+    
+def get_dashboard_insights(user_id: str) -> Dict[str, Any]:
+    return {
+        "status": "success",
+        "data": {
+            "insights": [
+                "Risk Profile: Conservative investor with personalized strategies",
+                "Learning Approach: Visual learning optimized for maximum retention", 
+                "Learning Path: 6 personalized modules designed for your level",
+                "Timeline: 8-12 hours to complete your financial education"
+            ],
+            "learning_plan_exists": True,
+            "risk_tolerance": "conservative",
+            "learning_style": "visual"
+        }
+    }
+
+

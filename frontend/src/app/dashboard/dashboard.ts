@@ -5,7 +5,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AgentDashboard } from '../agent-dashboard/agent-dashboard';
 import { DigitalFinancialLiteracy } from '../digital-financial-literacy/digital-financial-literacy';
-import { LearningPage } from '../learning-page/learning-page';
+import {LearningPage} from '../learning-page/learning-page';
 import { AgentService, AgentResponse } from '../agent.service';
 import { environment } from '../../environments/environment';
 import { AccountDetails } from '../account-details/account-details';

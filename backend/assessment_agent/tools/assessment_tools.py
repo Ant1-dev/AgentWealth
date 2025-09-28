@@ -239,3 +239,20 @@ def complete_assessment_and_handoff(user_id: str, summary: str) -> str:
         return handoff_summary
     else:
         return "❌ Error preparing handoff to planning agent. Please try again."
+    
+def get_agent_activities(user_id: str) -> Dict[str, Any]:
+    return {
+        "status": "success",
+        "data": {
+            "agents": [
+                {
+                    "name": "Assessment Agent",
+                    "status": "Active",
+                    "task": "Analyzing comprehension patterns from latest quiz responses",
+                    "decision": "User shows strong grasp of compound interest concepts",
+                    "last_update": "2025-01-15T10:30:00Z"
+                }
+            ],
+            "system_health": "optimal"
+        }
+    }

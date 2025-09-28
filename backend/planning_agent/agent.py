@@ -17,7 +17,8 @@ from .tools.planning_tools import (
     create_learning_path,
     get_user_learning_path,
     prepare_progress_handoff,
-    get_database_info
+    get_database_info,
+    get_dashboard_insights
 )
 from config import GOOGLE_API_KEY, USER_SESSIONS_DB_PATH
 
@@ -49,7 +50,8 @@ root_agent = Agent(
         create_learning_path,
         get_user_learning_path,
         prepare_progress_handoff,
-        get_database_info
+        get_database_info,
+        get_dashboard_insights
     ]
 )
 

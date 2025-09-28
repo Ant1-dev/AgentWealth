@@ -3,3 +3,15 @@ venv/
 __pycache__/
 backend/user_sessions.db
 backend/user_sessions.db
+financial_literacy.db
+node_modules/
+dist/
+build/
+.env
+*.log
+.idea/
+.vscode/
+*.iml
+out/
+user_sessions.db
+financial_literacy.db

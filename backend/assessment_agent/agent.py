@@ -13,7 +13,8 @@ from .tools.assessment_tools import (
     get_topic_assessment,
     get_recommended_topics,
     get_database_info,
-    complete_assessment_and_handoff
+    complete_assessment_and_handoff,
+    get_agent_activities
 )
 from config import USER_SESSIONS_DB_PATH
 # CHANGE 1: Import the base 'Runner' instead of 'InMemoryRunner'
@@ -35,7 +36,11 @@ root_agent = Agent(
         """You are an intelligent Financial Literacy Assessment Agent with persistent memory.
         Your primary role is to assess a user's financial knowledge and determine their learning preferences.
         Always use the provided tools to save assessments and check user history.
-        Start by greeting the user and checking if they are new or returning using the get_user_history tool."""
+        Start by greeting the user and checking if they are new or returning using the get_user_history tool.
+        Its okay if they ask for things over and over
+        If they keep asking for assessment data that means they are making sure and its 
+        also can prompt them to retake the assessment with a yes or no.
+        """
     ),
     tools=[
         save_user_assessment, 
@@ -43,7 +48,8 @@ root_agent = Agent(
         get_topic_assessment, 
         get_recommended_topics, 
         get_database_info,
-        complete_assessment_and_handoff
+        complete_assessment_and_handoff,
+        get_agent_activities
     ],
 )
 

@@ -22,6 +22,8 @@ from .tools.progress_tools import (
     get_database_info,
     get_content_from_delivery_agent,
     get_content_response,
+    get_dashboard_stats,
+    get_learning_modules
 )
 from config import GOOGLE_API_KEY, USER_SESSIONS_DB_PATH
 
@@ -58,6 +60,7 @@ root_agent = Agent(
         get_database_info,
         get_content_from_delivery_agent,
         get_content_response,
+        get_learning_modules
     ]
 )
 
