@@ -120,9 +120,9 @@ export class AgentDashboard implements OnInit, OnDestroy {
     });
 
     this.learningModules.set([
-      { name: 'Investment Basics', progress: 65, status: 'in-progress' },
-      { name: 'Risk Assessment', progress: 100, status: 'completed' },
-      { name: 'Portfolio Building', progress: 25, status: 'in-progress' },
+      { name: 'Investment Basics', progress: 0, status: 'in-progress' },
+      { name: 'Risk Assessment', progress: 0, status: 'completed' },
+      { name: 'Portfolio Building', progress: 0, status: 'in-progress' },
       { name: 'Retirement Planning', progress: 0, status: 'upcoming' },
       { name: 'Financial Goals', progress: 0, status: 'upcoming' },
       { name: 'Budgeting Fundamentals', progress: 0, status: 'upcoming' }

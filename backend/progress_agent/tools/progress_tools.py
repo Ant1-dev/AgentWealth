@@ -503,14 +503,14 @@ def get_learning_modules(user_id: str) -> Dict[str, Any]:
             "modules": [
                 {
                     "name": "Investment Basics",
-                    "progress": 65,
+                    "progress": 0,
                     "status": "in-progress",
                     "last_accessed": "2025-01-15T09:45:00Z",
                     "estimated_time_remaining": "2 hours"
                 },
                 {
                     "name": "Risk Assessment", 
-                    "progress": 100,
+                    "progress": 0,
                     "status": "completed",
                     "completion_date": "2025-01-14T16:30:00Z"
                 }
