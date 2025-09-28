@@ -1,73 +1,166 @@
+<!-- src/app/agent-dashboard/agent-dashboard.html -->
 <div class="dashboard-container">
   <div class="column">
     <div class="welcome-banner">
-      <h2>👋 Welcome back!</h2>
-      <p>Your AI agents have been working 24/7 to optimize your financial journey</p>
+      <h2>Financial Intelligence Dashboard</h2>
+      <p>Your AI agents are analyzing markets and optimizing your financial education 24/7</p>
+      <div class="stats-row">
+        <div class="stat">
+          <span class="stat-number">{{ activeAgents() }}</span>
+          <span class="stat-label">Active Agents</span>
+        </div>
+        <div class="stat">
+          <span class="stat-number">{{ overallProgress() }}%</span>
+          <span class="stat-label">Progress</span>
+        </div>
+        <div class="stat">
+          <span class="stat-number">{{ completedModules() }}</span>
+          <span class="stat-label">Completed</span>
+        </div>
+      </div>
     </div>
 
     <div class="card">
       <div class="card-header">
         <h4>Live Agent Activity</h4>
-        <span class="last-updated">Last update: 6 seconds ago</span>
+        <span class="last-updated">Last update: {{ formatUpdateTime() }}</span>
       </div>
-      <div *ngFor="let agent of agents" class="agent-card">
-        <div class="agent-header">
-          <h5>{{ agent.name }}</h5>
-          <span class="status" [ngClass]="agent.status.toLowerCase()">{{ agent.status }}</span>
+      
+      @for (agent of agents(); track agent.name) {
+        <div class="agent-card">
+          <div class="agent-header">
+            <h5>{{ agent.name }}</h5>
+            <span class="status" [class]="getStatusClass(agent.status)">
+              {{ agent.status }}
+            </span>
+          </div>
+          <p class="task">{{ agent.task }}</p>
+          
+          @if (agent.decision) {
+            <div class="decision-box decision">
+              <p><strong>DECISION:</strong> {{ agent.decision }}</p>
+            </div>
+          }
+          
+          @if (agent.prediction) {
+            <div class="decision-box prediction">
+              <p><strong>PREDICTION:</strong> {{ agent.prediction }}</p>
+            </div>
+          }
         </div>
-        <p class="task">{{ agent.task }}</p>
-        <div class="decision-box">
-          <p><strong>{{ agent.prediction ? 'PREDICTION:' : 'DECISION:' }}</strong> {{ agent.prediction || agent.decision }}</p>
+      }
+      
+      @if (isLoading()) {
+        <div class="loading-indicator">
+          <span>Syncing with agents...</span>
         </div>
-      </div>
+      }
     </div>
   </div>
 
   <div class="column">
     <div class="card">
       <div class="card-header">
-        <h4>Agent Predictions</h4>
+        <h4>AI Insights & Predictions</h4>
       </div>
+      
       <div class="prediction-item">
-        <p><strong>Next Challenge:</strong> Compound interest confusion predicted in 73% of scenarios</p>
+        <div class="prediction-icon">🎯</div>
+        <div class="prediction-content">
+          <p><strong>Next Challenge:</strong> Portfolio diversification concepts predicted as next learning focus</p>
+          <span class="confidence">Confidence: 87%</span>
+        </div>
       </div>
+      
       <div class="prediction-item">
-        <p><strong>Optimal Time:</strong> Best learning window tomorrow 2-4pm based on your patterns</p>
+        <div class="prediction-icon">⏰</div>
+        <div class="prediction-content">
+          <p><strong>Optimal Learning:</strong> Peak engagement detected between 2-4pm based on your patterns</p>
+          <span class="confidence">Confidence: 94%</span>
+        </div>
       </div>
-       <div class="prediction-item">
-        <p><strong>Goal Achievement:</strong> 89% probability of reaching investment confidence by Friday</p>
+      
+      <div class="prediction-item">
+        <div class="prediction-icon">📈</div>
+        <div class="prediction-content">
+          <p><strong>Goal Achievement:</strong> Investment confidence milestone achievable within 2 weeks</p>
+          <span class="confidence">Confidence: 82%</span>
+        </div>
+      </div>
+
+      <div class="prediction-item">
+        <div class="prediction-icon">🧠</div>
+        <div class="prediction-content">
+          <p><strong>Learning Style:</strong> Visual learning approach showing 3x better retention rates</p>
+          <span class="confidence">Confidence: 91%</span>
+        </div>
       </div>
     </div>
 
     <div class="card">
       <div class="card-header">
-        <h4>Current Learning</h4>
+        <h4>Financial Learning Journey</h4>
       </div>
-      <div class="learning-item">
-        <span>ETF Fundamentals</span>
-        <div class="progress-bar-container">
-          <div class="progress-bar" style="width: 78%;"></div>
+      
+      @for (module of learningModules(); track module.name) {
+        <div class="learning-item">
+          <div class="module-header">
+            <span class="module-name">{{ module.name }}</span>
+            <span class="module-status">
+              {{ getModuleStatusIcon(module.status) }}
+              @switch (module.status) {
+                @case ('completed') { Complete }
+                @case ('in-progress') { In Progress }
+                @case ('upcoming') { Coming Next }
+              }
+            </span>
+          </div>
+          
+          <div class="progress-container">
+            <div class="progress-bar-container">
+              <div 
+                class="progress-bar" 
+                [class.completed]="module.status === 'completed'"
+                [style.width]="getProgressBarWidth(module.progress)">
+              </div>
+            </div>
+            <span class="progress-text">{{ module.progress }}%</span>
+          </div>
         </div>
-        <span>78% Complete</span>
-      </div>
-      <div class="learning-item">
-        <span>Risk Assessment</span>
-        <div class="progress-bar-container">
-          <div class="progress-bar" style="width: 100%;"></div>
-        </div>
-        <span>Complete ✓</span>
-      </div>
-      <div class="learning-item">
-        <span>Portfolio Building</span>
-        <div class="progress-bar-container">
-          <div class="progress-bar" style="width: 15%;"></div>
-        </div>
-        <span>Coming Next</span>
-      </div>
-      <div class="learning-buttons">
-        <button class="btn-primary">Continue Learning →</button>
-        <button class="btn-secondary">Practice Trading</button>
-        <button class="btn-secondary">View All Progress</button>
+      }
+      
+      <div class="learning-actions">
+        <button 
+          class="btn-primary" 
+          (click)="continuelearning()"
+          [disabled]="isLoading()">
+          @if (isLoading()) {
+            Syncing...
+          } @else {
+            Continue Learning →
+          }
+        </button>
+        
+        <button 
+          class="btn-secondary" 
+          (click)="testUserHistory()"
+          [disabled]="isLoading()">
+          Test Agent Integration
+        </button>
+        
+        <button 
+          class="btn-secondary" 
+          (click)="practiceTrading()"
+          [disabled]="isLoading()">
+          Practice Trading
+        </button>
+        
+        <button 
+          class="btn-secondary" 
+          (click)="viewAllProgress()"
+          [disabled]="isLoading()">
+          View All Progress
+        </button>
       </div>
     </div>
   </div>
