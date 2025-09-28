@@ -137,7 +137,11 @@ export class LearningPage implements OnInit {
         currentUserId,
         `Check if a planning handoff exists for user_id: ${currentUserId}. Use the get_planning_handoff tool.`
       );
-      return !response.response.includes("No learning path handoff found");
+      // More robust check for a successful handoff.
+      // We look for a positive confirmation, not just the absence of a negative one.
+      const handoffExists = response.status === 'success' && !response.response.toLowerCase().includes("no learning path handoff found");
+      
+      return handoffExists;
     } catch (error) {
       console.error('Error checking progress handoff:', error);
       return false;
@@ -158,6 +162,14 @@ export class LearningPage implements OnInit {
     } catch (error) {
       console.error(`Error loading module ${moduleNumber} content:`, error);
       this.updateAgentDecision(`ERROR: ${error}`);
+      // Set a default error state
+      this.currentModule.set({
+        title: 'Error Loading Module',
+        content: 'Could not load module content. Please try again later.',
+        moduleNumber: moduleNumber,
+        topic: 'Error',
+        difficulty: 'Error'
+      });
     }
   }
 
@@ -175,6 +187,12 @@ export class LearningPage implements OnInit {
     } catch (error) {
       console.error(`Error loading lesson step ${stepNumber}:`, error);
        this.updateAgentDecision(`ERROR: ${error}`);
+       this.currentStep.set({
+         title: 'Error Loading Step',
+         content: 'Could not load lesson content. Please try again later.',
+         stepNumber: stepNumber,
+         totalSteps: 1
+       });
     }
   }
 
@@ -192,6 +210,7 @@ export class LearningPage implements OnInit {
     } catch (error) {
       console.error(`Error loading quiz for module ${moduleNumber}:`, error);
        this.updateAgentDecision(`ERROR: ${error}`);
+       this.quizQuestions.set([]);
     }
   }
 
@@ -204,6 +223,10 @@ export class LearningPage implements OnInit {
     const topicMatch = content.match(/Topic:\s*([^\n]+)/);
     const difficultyMatch = content.match(/Difficulty:\s*([^\n]+)/);
     
+    if(!titleMatch) {
+        console.warn("Could not parse module title from agent response.");
+    }
+
     this.currentModule.set({
       title: title.trim(),
       content: content,
@@ -217,6 +240,10 @@ export class LearningPage implements OnInit {
     const content = response.response || '';
     const titleMatch = content.match(/Step \d+:\s*([^\n]+)/);
     const stepsMatch = content.match(/Step \d+ of (\d+)/);
+    
+    if(!titleMatch) {
+      console.warn("Could not parse lesson step title from agent response.");
+    }
     
     this.currentStep.set({
       title: titleMatch ? titleMatch[1].trim() : `Learning Step ${stepNumber}`,
@@ -240,7 +267,9 @@ export class LearningPage implements OnInit {
         }
     });
     
-    if (questions.length === 0) {
+    if (questions.length === 0 && content) {
+      console.warn("Could not parse quiz questions from agent response.");
+      // Add a fallback question
       questions.push({
         question: "What is the primary benefit of a diversified investment portfolio?",
         options: ["Guaranteed high returns", "Reduced overall risk", "Elimination of all fees", "Quick and easy access to cash"],
