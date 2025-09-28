@@ -1,10 +1,13 @@
-import { Component } from '@angular/core';
+// src/app/dashboard/dashboard.ts
+import { Component, OnInit } from '@angular/core'; // Import OnInit
 import { AuthService } from '@auth0/auth0-angular';
-import { CommonModule, NgFor, NgClass, NgIf } from '@angular/common'; // <-- IMPORT CommonModule
+import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AgentDashboard } from '../agent-dashboard/agent-dashboard';
 import { DigitalFinancialLiteracy } from '../digital-financial-literacy/digital-financial-literacy';
 import { LearningPage } from '../learning-page/learning-page';
+import { AgentService } from '../agent.service';
+import { filter, switchMap, tap } from 'rxjs/operators';
 
 interface Message {
   sender: 'user' | 'ai';
@@ -16,8 +19,6 @@ interface Message {
   standalone: true,
   imports: [
     CommonModule,
-    NgFor,
-    NgClass,
     FormsModule,
     AgentDashboard,
     DigitalFinancialLiteracy,
@@ -26,26 +27,44 @@ interface Message {
   templateUrl: './dashboard.html',
   styleUrls: ['./dashboard.css']
 })
-export class Dashboard {
+export class Dashboard implements OnInit { // Implement OnInit
   messages: Message[] = [
     { sender: 'ai', text: 'Welcome! How can I help you navigate your financial journey today?' }
   ];
   userInput: string = '';
-  activeTab: 'chat' | 'agent' | 'learning' | 'finance' = 'agent';
+  activeTab: 'chat' | 'agent' | 'learning' | 'finance' = 'chat';
+  userId: string | undefined; // Property to store the user ID
 
-  constructor(private auth: AuthService) {}
+  constructor(public auth: AuthService, private agentService: AgentService) {}
+
+  ngOnInit(): void {
+    // Subscribe to the user observable to get the unique user ID
+    this.auth.user$.subscribe(user => {
+      if (user && user.sub) {
+        this.userId = user.sub;
+      }
+    });
+  }
 
   selectTab(tabName: 'chat' | 'agent' | 'learning' | 'finance'): void {
     this.activeTab = tabName;
   }
 
   sendMessage(): void {
-    if (!this.userInput.trim()) return;
-    this.messages.push({ sender: 'user', text: this.userInput });
+    if (!this.userInput.trim() || !this.userId) return; // Don't send if no userId
+
+    const userMessage = this.userInput;
+    this.messages.push({ sender: 'user', text: userMessage });
     this.userInput = '';
-    setTimeout(() => {
-      this.messages.push({ sender: 'ai', text: `I've received your message. Let's explore the Agent Dashboard for insights.` });
-    }, 1000);
+
+    // Use the dynamic userId from the auth service
+    this.agentService.sendMessageToAgent(this.userId, userMessage)
+      .subscribe((response: any) => {
+        this.messages.push({ sender: 'ai', text: response.message });
+      }, (error: any) => {
+        console.error('Error sending message:', error);
+        this.messages.push({ sender: 'ai', text: 'Sorry, I encountered an error. Please try again.' });
+      });
   }
 
   logout(): void {
