@@ -3,11 +3,16 @@ import sqlite3
 import json
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
+import os
+
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_DB_PATH = os.path.join(_SCRIPT_DIR, '..', 'financial_literacy.db')
+
 
 class DatabaseService:
     """Shared database service for all financial literacy agents"""
-    
-    def __init__(self, db_path: str = "financial_literacy.db"):
+
+    def __init__(self, db_path: str = _DB_PATH): 
         self.db_path = db_path
         self.init_database()
     

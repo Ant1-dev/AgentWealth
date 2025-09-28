@@ -1,3 +1,10 @@
+import sys
+import os
+
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_BACKEND_DIR = os.path.abspath(os.path.join(_SCRIPT_DIR, '..'))
+sys.path.append(_BACKEND_DIR)
+
 from google.adk.agents import Agent
 from google.adk.sessions import DatabaseSessionService
 from .tools.assessment_tools import (
@@ -8,11 +15,16 @@ from .tools.assessment_tools import (
     get_database_info,
     complete_assessment_and_handoff
 )
+from config import USER_SESSIONS_DB_PATH
+# CHANGE 1: Import the base 'Runner' instead of 'InMemoryRunner'
+from google.adk.runners import Runner
 
+# This service tells the agent how to store and retrieve session history.
 session_service = DatabaseSessionService(
-    db_url="sqlite:///user_sessions.db",
+    db_url=f"sqlite:///{USER_SESSIONS_DB_PATH}",
 )
 
+# This is the definition of your agent's identity, instructions, and tools.
 root_agent = Agent(
     name="assessment_agent",
     model="gemini-2.0-flash",
@@ -21,56 +33,9 @@ root_agent = Agent(
     ),
     instruction=(
         """You are an intelligent Financial Literacy Assessment Agent with persistent memory.
-
-🎯 YOUR ROLE:
-- Assess users' financial knowledge across multiple topics
-- Determine their risk tolerance and learning preferences
-- Remember their progress across sessions
-- Provide personalized recommendations
-
-📋 AVAILABLE TOPICS:
-- investment_basics (stocks, bonds, ETFs, mutual funds)
-- risk_management (diversification, risk tolerance, time horizon)
-- retirement_planning (401k, IRA, social security planning)
-- budgeting (income management, expense tracking, savings goals)
-- financial_goals (short-term vs long-term planning strategies)
-
-🔄 CONVERSATION FLOW:
-
-FIRST INTERACTION:
-1. Use get_user_history to check if they're returning
-2. If new: Welcome them warmly and explain what you do
-3. If returning: Greet them and mention their previous progress
-
-ASSESSMENT PROCESS:
-1. Ask about ONE topic at a time (don't overwhelm)
-2. Let them respond naturally about their experience
-3. Use save_user_assessment to record their response
-4. Explain their knowledge level and what it means
-5. Use get_recommended_topics to suggest next steps
-
-ONGOING SUPPORT:
-- Use get_topic_assessment to check specific areas
-- Be encouraging and patient
-- Celebrate progress and improvements
-- Keep conversations natural and friendly
-
-🚀 HANDOFF CRITERIA:
-- Assess at least 3-4 financial topics thoroughly
-- Have clear knowledge levels for each topic
-- Understand their risk tolerance and goals
-- User seems ready for personalized learning
-- Use complete_assessment_and_handoff tool to transfer to planning agent
-
-⚡ IMPORTANT RULES:
-- Always use user_id when calling tools (available in session)
-- One topic per conversation turn
-- Be specific about what each knowledge level means
-- Never make users feel judged about their current financial knowledge
-- Focus on growth and learning opportunities
-- Use simple, non-intimidating language
-
-Remember: Your job is assessment only. The planning agent will create the actual learning curriculum!"""
+        Your primary role is to assess a user's financial knowledge and determine their learning preferences.
+        Always use the provided tools to save assessments and check user history.
+        Start by greeting the user and checking if they are new or returning using the get_user_history tool."""
     ),
     tools=[
         save_user_assessment, 
@@ -81,3 +46,11 @@ Remember: Your job is assessment only. The planning agent will create the actual
         complete_assessment_and_handoff
     ],
 )
+
+# CHANGE 2: Use the base 'Runner' class here. It is designed to accept a session_service.
+runner = Runner(
+    agent=root_agent,
+    app_name="assessment_app",
+    session_service=session_service
+)
+

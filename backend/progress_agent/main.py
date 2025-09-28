@@ -12,7 +12,7 @@ def run_agent():
     message = data.get("message")
 
     response = ""
-    for chunk in root_agent.invoke(message, session_id=user_id):
+    for chunk in root_agent.run(message, session_id=user_id):
         response += chunk
 
     return jsonify({"response": response})
