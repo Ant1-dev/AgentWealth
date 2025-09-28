@@ -71,7 +71,7 @@
         <input 
           type="text" 
           [value]="userInput()"
-          (input)="updateUserInput($event.target.value)"
+          (input)="updateUserInput($any($event.target).value)"
           placeholder="Ask about financial literacy, assessments, or learning paths..." 
           (keyup.enter)="sendMessage()"
           [disabled]="isLoading()"/>

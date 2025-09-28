@@ -1,7 +1,7 @@
 // src/app/agent.service.ts
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, catchError, of } from 'rxjs';
+import { Observable, catchError, of, map } from 'rxjs';
 import { environment } from '../environments/environment';
 
 export interface AgentResponse {
@@ -10,9 +10,13 @@ export interface AgentResponse {
   data?: any;
 }
 
-export interface AssessmentRequest {
-  message: string;
-  user_id?: string;
+export interface ADKRequest {
+  appName: string;
+  userId: string;
+  sessionId: string;
+  newMessage: {
+    text: string;
+  };
 }
 
 @Injectable({
@@ -29,13 +33,22 @@ export class AgentService {
    * @returns Observable with agent's response
    */
   sendToAssessmentAgent(userId: string, message: string): Observable<AgentResponse> {
-    const body: AssessmentRequest = {
-      message: message,
-      user_id: userId
+    const body: ADKRequest = {
+      appName: "assessment_agent",
+      userId: userId,
+      sessionId: "session_" + userId.substring(0, 8),
+      newMessage: {
+        text: message
+      }
     };
 
-    return this.http.post<AgentResponse>(`${this.agentUrls.assessmentAgent}/run`, body)
+    return this.http.post<any>(`${this.agentUrls.assessmentAgent}/run`, body)
       .pipe(
+        map(response => ({
+          response: response.response || response.text || JSON.stringify(response),
+          status: 'success' as const,
+          data: response
+        })),
         catchError(error => {
           console.error('Assessment Agent Error:', error);
           return of({
@@ -53,13 +66,22 @@ export class AgentService {
    * @returns Observable with agent's response
    */
   sendToPlanningAgent(userId: string, message: string): Observable<AgentResponse> {
-    const body: AssessmentRequest = {
-      message: message,
-      user_id: userId
+    const body: ADKRequest = {
+      appName: "planning_agent_a2a",
+      userId: userId,
+      sessionId: "session_" + userId.substring(0, 8),
+      newMessage: {
+        text: message
+      }
     };
 
-    return this.http.post<AgentResponse>(`${this.agentUrls.planningAgent}/run`, body)
+    return this.http.post<any>(`${this.agentUrls.planningAgent}/run`, body)
       .pipe(
+        map(response => ({
+          response: response.response || response.text || JSON.stringify(response),
+          status: 'success' as const,
+          data: response
+        })),
         catchError(error => {
           console.error('Planning Agent Error:', error);
           return of({
@@ -77,13 +99,22 @@ export class AgentService {
    * @returns Observable with agent's response
    */
   sendToProgressAgent(userId: string, message: string): Observable<AgentResponse> {
-    const body: AssessmentRequest = {
-      message: message,
-      user_id: userId
+    const body: ADKRequest = {
+      appName: "progress_agent_a2a",
+      userId: userId,
+      sessionId: "session_" + userId.substring(0, 8),
+      newMessage: {
+        text: message
+      }
     };
 
-    return this.http.post<AgentResponse>(`${this.agentUrls.progressAgent}/run`, body)
+    return this.http.post<any>(`${this.agentUrls.progressAgent}/run`, body)
       .pipe(
+        map(response => ({
+          response: response.response || response.text || JSON.stringify(response),
+          status: 'success' as const,
+          data: response
+        })),
         catchError(error => {
           console.error('Progress Agent Error:', error);
           return of({
@@ -101,13 +132,22 @@ export class AgentService {
    * @returns Observable with agent's response
    */
   sendToContentAgent(userId: string, message: string): Observable<AgentResponse> {
-    const body: AssessmentRequest = {
-      message: message,
-      user_id: userId
+    const body: ADKRequest = {
+      appName: "content_delivery_agent_a2a",
+      userId: userId,
+      sessionId: "session_" + userId.substring(0, 8),
+      newMessage: {
+        text: message
+      }
     };
 
-    return this.http.post<AgentResponse>(`${this.agentUrls.contentDeliveryAgent}/run`, body)
+    return this.http.post<any>(`${this.agentUrls.contentDeliveryAgent}/run`, body)
       .pipe(
+        map(response => ({
+          response: response.response || response.text || JSON.stringify(response),
+          status: 'success' as const,
+          data: response
+        })),
         catchError(error => {
           console.error('Content Delivery Agent Error:', error);
           return of({
@@ -126,20 +166,31 @@ export class AgentService {
    * @returns Observable with agent's response
    */
   sendToAgent(agentType: keyof typeof environment.agentServices, userId: string, message: string): Observable<AgentResponse> {
-    switch(agentType) {
-      case 'assessmentAgent':
-        return this.sendToAssessmentAgent(userId, message);
-      case 'planningAgent':
-        return this.sendToPlanningAgent(userId, message);
-      case 'progressAgent':
-        return this.sendToProgressAgent(userId, message);
-      case 'contentDeliveryAgent':
-        return this.sendToContentAgent(userId, message);
-      default:
-        return of({
-          response: 'Invalid agent type specified.',
-          status: 'error' as const
-        });
-    }
+    const body: ADKRequest = {
+      appName: agentType.replace('Agent', '_agent'),
+      userId: userId,
+      sessionId: "session_" + userId.substring(0, 8),
+      newMessage: {
+        text: message
+      }
+    };
+
+    const agentUrl = this.agentUrls[agentType];
+    
+    return this.http.post<any>(`${agentUrl}/run`, body)
+      .pipe(
+        map(response => ({
+          response: response.response || response.text || JSON.stringify(response),
+          status: 'success' as const,
+          data: response
+        })),
+        catchError(error => {
+          console.error(`${agentType} Error:`, error);
+          return of({
+            response: 'Agent is currently unavailable.',
+            status: 'error' as const
+          });
+        })
+      );
   }
 }
