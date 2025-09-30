@@ -69,8 +69,6 @@ ng serve
 4. Progress through 6 modules with interactive content
 5. Track completion and earn certificates
 
-[INSERT SCREENSHOT: Progress tracking]
-
 ## Project Structure
 
 ```
