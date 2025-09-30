@@ -5,3 +5,5 @@
 __pycache__/
 *.py[cod]
 *.pyo
+financial_litercy.db
+user_sessions.db
