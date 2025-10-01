@@ -96,7 +96,7 @@ ng serve
 
 ## Built With
 
-Shell Hacks 2025 - 36 hour hackathon
+ShellHacks 2025 - 36 hour hackathon
 
 <img src="./frontend/public/demoPhoto.jpg" style="width: 100%; height: auto"/>
 
